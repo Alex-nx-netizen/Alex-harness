@@ -29,10 +29,10 @@
 
 ### 方式一：插件安装（推荐）
 
-在 Claude Code 中执行 `/plugins`，进入 **Marketplaces** 标签页，点击 **+ Add Marketplace**，填入：
+在 Claude Code 中执行 ：
 
 ```
-https://github.com/Alex-nx-netizen/Alex-harness
+/plugin marketplace add Alex-nx-netizen/Alex-harness
 ```
 
 安装后在任意项目目录下，所有 skill 命令（`/helix`、`/a1-task-understander` 等）即可使用。
