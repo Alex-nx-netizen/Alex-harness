@@ -68,6 +68,7 @@ function loadCursor() {
 function saveCursor(cursor) {
   const json = JSON.stringify(cursor, null, 2);
   JSON.parse(json);
+  fs.mkdirSync(path.dirname(CURSOR_PATH), { recursive: true });
   fs.writeFileSync(CURSOR_PATH, json, "utf-8");
 }
 

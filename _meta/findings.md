@@ -5,6 +5,28 @@
 
 ## 已验证（Confirmed）
 
+### F-020: session-reporter Stop hook + saveCursor ENOENT bug 联手向飞书 IM 推了 30+ 条重复消息
+- **来源**: 2026-5-1 22:41 用户飞书截图：Dick's Process CLI bot 收到大量 `[里程碑]` / `2026-4-30` / `2026-4-29` 重复消息；同期终端 Stop hook 报 `ENOENT: no such file or directory, open '...0.3.0/skills/session-reporter/logs/push-cursor.json'`
+- **现象**: 每次会话 Stop 触发 hook → loadCursor() 因目录不存在返回空 → progress.md 全部会话被判"未推" → 全推飞书 Base + IM → saveCursor() writeFileSync 因目录缺失抛 ENOENT → cursor 没存住 → 下次 Stop 重复同样流程
+- **根因（双重）**:
+  1. **代码 bug**：`saveCursor()` 直接 `fs.writeFileSync(CURSOR_PATH, ...)`，没有 `mkdirSync(path.dirname, recursive: true)`；同文件 `writeRunLog()` 有这一步——同一文件一处加一处漏
+  2. **打包 bug**：v0.3.0 plugin cache 目录只复制了 `run.cjs` + `SKILL.md`，没带 `logs/` 子目录；首次运行就走进 ENOENT 路径
+  3. **设计 bug（更根本）**：Stop hook 每次会话结束都自动推飞书的设计本身违反用户偏好——用户要的是"整体任务完成时手动推一次总结性文档"，不是"每会话/每里程碑都推"
+- **结论**: 自动化推送 + 静默失败 + 默认设计与用户偏好错位，三者叠加 = 飞书消息洪水
+- **解决（这次）**:
+  - 止血：`hooks/hooks.json` 的 Stop key 改名 `_disabled_Stop_2026-5-1`（Claude Code 不识别 → 等同禁用）
+  - 修代码 bug：项目源码 + plugin cache 两份 `run.cjs:71` 的 `saveCursor` 都加 `fs.mkdirSync(path.dirname(CURSOR_PATH), { recursive: true })`
+  - 同步 cursor：把项目源码 `logs/push-cursor.json`（含 36 条已推 run_id）复制到 plugin cache，让重启后即使误启也不会重复推
+  - 更新 memory：`feedback_milestone_push_to_feishu.md` 整体重写——从"每里程碑必推 IM"改为"整体任务完成才推总结文档"
+- **解决（长期候选）**:
+  - session-reporter 重构为"summary 模式"：手动调用 `--finalize`，把 N 个会话聚合成 1 篇飞书云文档 + 1 条 IM 链接
+  - 任何 hook 都需"幂等性 + 写前 mkdirSync + 失败显式日志"三件套（蓝图 §3.A6 校验元的具象延伸）
+  - plugin 打包必须带运行期需要的所有目录（即使空目录也要 .gitkeep）
+- **影响**:
+  - 旧 memory `feedback_milestone_push_to_feishu.md` 已重写
+  - hooks.json 在 v0.3.1 之前不再注册 Stop hook
+  - F-020 与 F-008（"写后必校验"）同源——都是"静默失败 + 没有写后验证"
+
 ### F-019: SKILL.md SIGNAL_KEYWORDS frontmatter ≠ ANALYZE clustering 真实驱动（双源真理）
 - **来源**: 2026-4-30 15:45 P-2026-4-30-002 B 落地后跑 evolution-tracker 验证：用了 13 个新关键词的扩展 SKILL.md → tracker 仍报 clusters_found=0；查 phase2_analyze.cjs 才发现真正用的是文件内**硬编码 DIRECTION_RULES**，frontmatter SIGNAL_KEYWORDS 只被 frontmatter parser 读入但**从未参与聚类**
 - **现象**: 改 SKILL.md SIGNAL_KEYWORDS = no-op；改 lib/phase2_analyze.cjs DIRECTION_RULES 才生效
