@@ -1,0 +1,21 @@
+{
+  "name": "alex-harness",
+  "version": "0.2.2",
+  "description": "Personal SDLC agent harness with 14 skills bundled: helix entry + A1-A8 business elements + 5 governance skills.",
+  "author": {
+    "name": "Alex-nx-netizen",
+    "url": "https://github.com/Alex-nx-netizen"
+  },
+  "homepage": "https://github.com/Alex-nx-netizen/Alex-harness",
+  "repository": "https://github.com/Alex-nx-netizen/Alex-harness",
+  "keywords": [
+    "harness",
+    "sdlc",
+    "agent",
+    "helix",
+    "claude-code",
+    "skills"
+  ],
+  "skills": ["./.claude/skills/"],
+  "hooks": "./hooks/hooks.json"
+}

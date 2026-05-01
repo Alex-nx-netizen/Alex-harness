@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "hooks": {
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/.claude/skills/session-reporter/run.cjs\""
+          }
+        ],
+        "description": "Auto-push session completion log to Feishu Base on Stop",
+        "id": "stop:session-reporter"
+      }
+    ]
+  }
+}

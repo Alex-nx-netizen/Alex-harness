@@ -1,124 +1,39 @@
 {
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "alex-harness",
-  "display_name": "Alex Harness",
-  "description": "Personal SDLC agent harness — helix entry point + A1-A8 business elements + governance layer (session-reporter, mode-router, context-curator, evolution-tracker, knowledge-curator).",
-  "version": "0.1.0",
+  "description": "Personal SDLC agent harness — helix entry + A1-A8 business elements + governance layer (session-reporter, mode-router, context-curator, evolution-tracker, knowledge-curator).",
   "owner": {
     "name": "Alex-nx-netizen",
     "url": "https://github.com/Alex-nx-netizen"
   },
-  "repository": "https://github.com/Alex-nx-netizen/Alex-harness",
+  "metadata": {
+    "version": "0.2.2"
+  },
   "plugins": [
     {
-      "name": "helix",
-      "display_name": "Helix",
-      "description": "Unified harness entry point. /helix = full SDLC execution authority. Orchestrates all A1-A8 elements automatically.",
-      "skillPath": ".claude/skills/helix",
-      "entrypoint": "SKILL.md"
-    },
-    {
-      "name": "a1-task-understander",
-      "display_name": "A1 Task Understander",
-      "description": "Parses user intent into structured TaskCard (type, scope, done criteria, risk signals).",
-      "skillPath": ".claude/skills/a1-task-understander",
-      "entrypoint": "SKILL.md"
-    },
-    {
-      "name": "a2-repo-sensor",
-      "display_name": "A2 Repo Sensor",
-      "description": "Scans repo structure, tech stack, recent commits, dirty files → RepoContext JSON.",
-      "skillPath": ".claude/skills/a2-repo-sensor",
-      "entrypoint": "SKILL.md"
-    },
-    {
-      "name": "a3-retriever",
-      "display_name": "A3 Retriever",
-      "description": "Keyword + semantic code search within repo → SearchResult[].",
-      "skillPath": ".claude/skills/a3-retriever",
-      "entrypoint": "SKILL.md"
-    },
-    {
-      "name": "a4-planner",
-      "display_name": "A4 Planner",
-      "description": "Generates 2-3 implementation plan options with trade-offs, recommends best path.",
-      "skillPath": ".claude/skills/a4-planner",
-      "entrypoint": "SKILL.md"
-    },
-    {
-      "name": "a5-executor",
-      "display_name": "A5 Executor",
-      "description": "Executes PlanDoc file-by-file, enforces minimal changes, auto-invokes A8 for destructive ops.",
-      "skillPath": ".claude/skills/a5-executor",
-      "entrypoint": "SKILL.md"
-    },
-    {
-      "name": "a6-validator",
-      "display_name": "A6 Validator",
-      "description": "Auto-detects project type, runs tests/lint/typecheck → ValidationReport.",
-      "skillPath": ".claude/skills/a6-validator",
-      "entrypoint": "SKILL.md"
-    },
-    {
-      "name": "a7-explainer",
-      "display_name": "A7 Explainer",
-      "description": "Generates commit messages, PR descriptions, and why-only code comments.",
-      "skillPath": ".claude/skills/a7-explainer",
-      "entrypoint": "SKILL.md"
-    },
-    {
-      "name": "a8-risk-guard",
-      "display_name": "A8 Risk Guard",
-      "description": "Mandatory risk assessment before destructive/irreversible operations. Cannot be bypassed.",
-      "skillPath": ".claude/skills/a8-risk-guard",
-      "entrypoint": "SKILL.md"
-    },
-    {
-      "name": "session-reporter",
-      "display_name": "Session Reporter",
-      "description": "Auto-pushes session completion log to Feishu Base on Stop hook.",
-      "skillPath": ".claude/skills/session-reporter",
-      "entrypoint": "SKILL.md"
-    },
-    {
-      "name": "mode-router",
-      "display_name": "Mode Router",
-      "description": "Analyzes task signals → recommends solo / solo+tools / team routing.",
-      "skillPath": ".claude/skills/mode-router",
-      "entrypoint": "SKILL.md"
-    },
-    {
-      "name": "context-curator",
-      "display_name": "Context Curator",
-      "description": "Session-start context compression — loads _meta/ + memory + skills in 5 seconds.",
-      "skillPath": ".claude/skills/context-curator",
-      "entrypoint": "SKILL.md"
-    },
-    {
-      "name": "evolution-tracker",
-      "display_name": "Evolution Tracker",
-      "description": "Reads runs.jsonl → L2 retrospective → improvement proposals.",
-      "skillPath": ".claude/skills/evolution-tracker",
-      "entrypoint": "SKILL.md"
-    },
-    {
-      "name": "knowledge-curator",
-      "display_name": "Knowledge Curator",
-      "description": "Organizes Feishu docs / web pages / notes → structured Feishu wiki pages.",
-      "skillPath": ".claude/skills/knowledge-curator",
-      "entrypoint": "SKILL.md"
+      "name": "alex-harness",
+      "source": "./",
+      "description": "Single install brings 14 skills: helix orchestrator + A1-A8 SDLC chain + 5 governance skills.",
+      "version": "0.2.2",
+      "author": {
+        "name": "Alex-nx-netizen",
+        "url": "https://github.com/Alex-nx-netizen"
+      },
+      "homepage": "https://github.com/Alex-nx-netizen/Alex-harness",
+      "repository": "https://github.com/Alex-nx-netizen/Alex-harness",
+      "keywords": [
+        "harness",
+        "sdlc",
+        "agent",
+        "helix",
+        "skills"
+      ],
+      "category": "workflow",
+      "tags": [
+        "harness",
+        "sdlc",
+        "skills"
+      ]
     }
-  ],
-  "hooks": {
-    "Stop": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \".claude/skills/session-reporter/run.cjs\""
-          }
-        ]
-      }
-    ]
-  }
+  ]
 }
