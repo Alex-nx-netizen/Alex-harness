@@ -1,0 +1,43 @@
+# P-2026-4-29-002: phase7_push
+
+> NL summary (171字)：knowledge-curator 缺 Phase 7 PUSH——产出只打印 doc_url，用户得手动点。证据 L4 fix_notes rating=3 + F-012。已用 lark-cli im 验证可行。建议 Phase 6 之前插 Phase 7：默认 user open_id（global memory），缺失时手机号兜底。
+
+## What
+在 .claude/skills/knowledge-curator/SKILL.md 的 Phase 5 LOG 之后、Phase 6 REPORT 之前插入 Phase 7 PUSH 章节
+
+## Why
+Evidence runs: 2026-4-29-meta-kim
+Evidence findings: F-012
+
+## Where
+.claude/skills/knowledge-curator/SKILL.md @ Phase 5 末尾
+
+## Risk
+推送失败的兜底——若 lark-cli contact 也失败，要明示用户"手动复制 URL"，不要静默吃错。Mitigation: 在 Phase 7 写明 try/catch + errors[] 字段记 push_failed: <reason>，不影响 doc 创建。
+
+## Diff
+```diff
+--- a/.claude/skills/knowledge-curator/SKILL.md
++++ b/.claude/skills/knowledge-curator/SKILL.md
+@@ Phase 5: LOG @@
+   "user_feedback": { "rating": null, "fix_notes": null }
+   }
+   ```
++
++### Phase 7: PUSH（产出直推飞书 IM）
++
++**铁律**：成功跑完（含 user_feedback 待填）后、Phase 6 REPORT 之前，**必须**直推。
++
++1. **目标**：默认 user open_id（从 global memory 读，如 `ou_835b...`）
++2. **兜底**：user_id 缺失 → 询问用户手机号 → `lark-cli contact +users-search --mobile <phone>` 取 open_id
++3. **内容**：doc 标题 + URL + 关键章节摘要 + errors 摘要（≤300 字）
++4. **命令**：`lark-cli im +messages-send --user-id <ou_xxx> --as bot --markdown "$(cat tmp/push.md)"`
++5. **失败处理**：推送失败时**不**回滚 doc 创建（doc 已成事实），只在 runs.jsonl 的 errors 字段记 `push_failed: <reason>`
++
++> **来源**：F-012 + L4 user_feedback "飞书文档应直推 IM 而不是给链接"
+
+ ### Phase 6: REPORT（向用户汇报）
+```
+
+---
+status=pending | created_at=2026-4-29 15:33:58 | reject_count_same_direction=0

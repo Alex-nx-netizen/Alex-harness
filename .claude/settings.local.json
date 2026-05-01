@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node *)",
+      "Bash(lark-cli im *)",
+      "Bash(lark-cli base *)"
+    ]
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"E:\\ai\\study\\person\\Alex-harness\\.claude\\skills\\session-reporter\\run.cjs\""
+          }
+        ]
+      }
+    ]
+  }
+}

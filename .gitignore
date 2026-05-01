@@ -1,0 +1,11 @@
+# Runtime state & cursor
+.claude/skills/*/logs/
+_tmp_*.json
+*.bak
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Node
+node_modules/

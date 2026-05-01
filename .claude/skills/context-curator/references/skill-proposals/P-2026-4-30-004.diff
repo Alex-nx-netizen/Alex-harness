@@ -1,0 +1,41 @@
+# P-2026-4-30-004: phase4_robustness
+
+> NL summary (168字)：context-curator Phase 4 WRITE 缺响应解析与 chunks 落盘顺序硬化。证据 F-008 + F-010 + F-011。建议 Phase 4 末尾插 Phase 4.5 VERIFY 三步：解析 j.data.doc_id / chunks 全落盘再 create / 写后 JSON.parse 校验。
+
+## What
+在 .claude/skills/context-curator/SKILL.md 的 Phase 4 之后、Phase 5 LOG 之前插入 Phase 4.5 VERIFY 章节
+
+## Why
+Evidence runs: 2026-4-30-215512
+Evidence findings: F-008, F-010, F-011
+
+## Where
+.claude/skills/context-curator/SKILL.md @ Phase 4 末尾
+
+## Risk
+Phase 4.5 加进来要保持 Phase 5 LOG 即使 4.5 abort 也能记错。M2.3 实现时务必双向 try/finally。
+
+## Diff
+```diff
+--- a/.claude/skills/context-curator/SKILL.md
++++ b/.claude/skills/context-curator/SKILL.md
+@@ Phase 4: WRITE @@
+   ```bash
+   lark-cli docs +update --doc "<doc_id>" --mode <chosen> ...
+   ```
++
++### Phase 4.5: VERIFY（写入后强制校验）
++
++`+create` / `+update` 调用后**必须**：
++
++1. **响应解析**：从 `j.data.doc_id` 和 `j.data.doc_url` 取 token（**不是**顶层）。失败立即 abort，不重试。
++2. **chunks 落盘顺序**：分块写入时**必须先把所有 chunks 写到 `tmp/chunk_*.md`**，再开始 create + append 循环。中途失败可从 `tmp/` 恢复，不必重切源文件。
++3. **写后校验**：任何写入 JSONL 后立刻对每行 `JSON.parse`；失败 abort 并提示行号。
++
++> **来源**：F-008 + F-010 + F-011（写后不验 + parser 漏 data.doc_id + chunks 落盘顺序反模式）
+
+ ### Phase 5: LOG（写日志，供自我进化）
+```
+
+---
+status=pending | created_at=2026-4-30 23:23:51 | reject_count_same_direction=0
