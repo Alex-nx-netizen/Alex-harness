@@ -1,20 +1,20 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "alex-harness",
-  "description": "Personal SDLC agent harness — helix entry + A1-A8 business elements + governance layer (session-reporter, mode-router, context-curator, evolution-tracker, knowledge-curator).",
+  "description": "Personal SDLC agent harness — /helix is the only entrypoint, orchestrating A1-A8 phases under a Ralph passes contract.",
   "owner": {
     "name": "Alex-nx-netizen",
     "url": "https://github.com/Alex-nx-netizen"
   },
   "metadata": {
-    "version": "0.2.2"
+    "version": "0.3.0"
   },
   "plugins": [
     {
       "name": "alex-harness",
       "source": "./",
-      "description": "Single install brings 14 skills: helix orchestrator + A1-A8 SDLC chain + 5 governance skills.",
-      "version": "0.2.2",
+      "description": "Single install: only /helix is exposed as a slash command; it spawns a1-a8 phases that auto-report passes back to a single ledger. Ralph contract enforced.",
+      "version": "0.3.0",
       "author": {
         "name": "Alex-nx-netizen",
         "url": "https://github.com/Alex-nx-netizen"
