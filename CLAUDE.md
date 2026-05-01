@@ -1,7 +1,7 @@
 # Person Project — Personal Agent Harness
 
 > 这是Alex的私人 agent harness 项目。
-> 目标：基于 OpenAI Harness Engineering 三部曲 + 老金"元思想"，搭建属于自己的 agent harness。
+> 目标：基于 OpenAI Harness Engineering 三部曲 + 元思想，搭建属于自己的 agent harness。
 > 状态：v0.1（蓝图已整合，进入 Phase 1 / M1），持续迭代。
 > 工作目录：`E:\ai\study\person\Alex-harness\`（2026-4-28 从 `E:\ai\study\person\harness\` 重命名）
 

@@ -1,5 +1,7 @@
 # Runtime state & cursor
 .claude/skills/*/logs/
+.claude/skills/*/tmp/
+_meta/context-snapshots/
 _tmp_*.json
 *.bak
 

@@ -281,7 +281,7 @@
 - ✅ **M1.5 完成**: knowledge-curator 第 2 次跑，源 = `https://github.com/KimYx0207/Meta_Kim`
   - 输入: README + README.zh-CN + CLAUDE.md + AGENTS.md（4 个 raw URL via WebFetch）
   - 决策: CREATE_NEW（search 命中 2 个无关 doc，相似度低）
-  - 产出: <https://www.feishu.cn/wiki/NBNLwMjOziZHOtkyYb2ch91tnug> = "[AI学习] Meta_Kim — 老金'元'方法论的开源工程落地"
+  - 产出: <https://www.feishu.cn/wiki/NBNLwMjOziZHOtkyYb2ch91tnug> = "[AI学习] Meta_Kim — 元思想方法论的开源工程落地"
   - 内容: 15K JS 字符 / 449 行 / 13 章节（含 §7 Harness 三部曲对照、§9 用户主权 placeholder）
   - 写入: 3 chunks（chunk 0 via create + chunk 1, 2 via append）
   - 耗时: ~16 分钟（10:12:40 → 10:28:35）
@@ -346,7 +346,7 @@
 - 🎯 **下一步**：等用户给 M1.5 第 2 次跑 knowledge-curator 的素材（国内可达 URL / 截图 / 聊天记录都行） + intent
 
 ### 会话 7：M1.2 第 2 次跑 ABORTED（GFW）+ 项目目录整体迁入 harness/
-- ❌ **M1.2 失败**：第 2 次跑目标是分析 https://github.com/KimYx0207/Meta_Kim（老金"元"开源落地项目）。本机不通 github（curl SSL handshake fail / WebFetch socket closed / gh api EOF / ghproxy 镜像也 fail；百度可达 → GFW）。按 SKILL.md "网络抓取失败 → 不要凭空造内容"，aborted 在 INTAKE 阶段
+- ❌ **M1.2 失败**：第 2 次跑目标是分析 https://github.com/KimYx0207/Meta_Kim（元思想开源落地项目）。本机不通 github（curl SSL handshake fail / WebFetch socket closed / gh api EOF / ghproxy 镜像也 fail；百度可达 → GFW）。按 SKILL.md "网络抓取失败 → 不要凭空造内容"，aborted 在 INTAKE 阶段
 - ✅ **logs 记录**：runs.jsonl L3 已写入 aborted record（completed=false / errors=network_unreachable_github），通过 JSON.parse 校验（铁律 #8）
 - ✅ **目录整体迁入**：`E:\ai\study\person\` → `E:\ai\study\person\harness\`。所有 4 项（CLAUDE.md / _meta / design / .claude）move 到 harness/。父目录 `person/` 现在只剩 harness/ 一项
 - ✅ **memory 复制（不删旧）**：`~/.claude/projects/E--ai-study-person/memory/` → `~/.claude/projects/E--ai-study-person-harness/memory/`；旧路径保留作 fallback，等用户验证后再清理

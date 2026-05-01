@@ -1,6 +1,6 @@
 # Alex-harness
 
-> Alex 的私人 Agent Harness —— 基于 OpenAI Harness Engineering 三部曲 + 老金"元思想"搭建的个人工作流自动化系统。
+> Alex 的私人 Agent Harness —— 基于 OpenAI Harness Engineering 三部曲 + 元思想搭建的个人工作流自动化系统。
 
 ## 项目定位
 
@@ -81,4 +81,4 @@ node .claude/skills/mode-router/run.cjs "任务描述"
 ## 参考资料
 
 - [Harness Engineering 三部曲（飞书合集）](https://www.feishu.cn/wiki/UtW0wUbPbifCX4kk3ypcGcyinGg)
-- [老金"元思想"](https://waytoagi.feishu.cn/wiki/KGbewcwM1ic0kFk2A58cL8OanFh)
+- [元思想](https://waytoagi.feishu.cn/wiki/KGbewcwM1ic0kFk2A58cL8OanFh)
