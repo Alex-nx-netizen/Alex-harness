@@ -1,7 +1,21 @@
 "use strict";
-const { execSync } = require("child_process");
+const { execSync, spawnSync } = require("child_process");
 const fs = require("fs");
 const path = require("path");
+
+const SKILL_DIR = __dirname;
+const HELIX_RUN = path.join(process.cwd(), "skills", "helix", "run.cjs");
+const RUNS_LOG = path.join(SKILL_DIR, "logs", "runs.jsonl");
+const PHASE = "a6-validator";
+
+function nowBJ() {
+  const bj = new Date(Date.now() + 8 * 3600 * 1000);
+  const p = (n) => String(n).padStart(2, "0");
+  return (
+    `${bj.getUTCFullYear()}-${bj.getUTCMonth() + 1}-${bj.getUTCDate()} ` +
+    `${p(bj.getUTCHours())}:${p(bj.getUTCMinutes())}:${p(bj.getUTCSeconds())}`
+  );
+}
 
 function run(cmd, cwd) {
   try {
@@ -56,23 +70,47 @@ function detect(root) {
   return checks;
 }
 
+function reportToHelix(result, root) {
+  // 1) 自留底
+  fs.mkdirSync(path.dirname(RUNS_LOG), { recursive: true });
+  const line = JSON.stringify({
+    ...result,
+    user_feedback: { rating: null, fix_notes: null },
+  });
+  JSON.parse(line);
+  fs.appendFileSync(RUNS_LOG, line + "\n", "utf-8");
+
+  // 2) 上报 helix
+  if (fs.existsSync(HELIX_RUN)) {
+    spawnSync("node", [HELIX_RUN, "--report", PHASE, JSON.stringify(result)], {
+      stdio: "inherit",
+      cwd: root,
+    });
+  }
+}
+
 function main() {
+  const startMs = Date.now();
   const root = process.cwd();
   const checks = detect(root);
 
   if (checks.length === 0) {
-    console.log(
-      JSON.stringify(
-        {
-          passed: true,
-          checks: [],
-          summary: "No checks detected",
-          action_required: null,
-        },
-        null,
-        2,
-      ),
-    );
+    const report = {
+      phase: PHASE,
+      passes: true,
+      summary:
+        "No checks detected (no tsc/eslint/test/cargo/go/python markers)",
+      output: { checks: [], action_required: null },
+      duration_ms: Date.now() - startMs,
+      errors: [],
+      ts: nowBJ(),
+      // legacy fields for backward compat with LLM consumers
+      passed: true,
+      checks: [],
+      action_required: null,
+    };
+    reportToHelix(report, root);
+    console.log(JSON.stringify(report, null, 2));
     return;
   }
 
@@ -90,14 +128,29 @@ function main() {
   }
 
   const failed = results.filter((r) => r.status === "fail");
+  const passes = failed.length === 0;
   const report = {
-    passed: failed.length === 0,
-    checks: results,
+    phase: PHASE,
+    passes,
     summary: `${results.length - failed.length}/${results.length} checks passed`,
+    output: {
+      checks: results,
+      action_required:
+        failed.length > 0
+          ? `Fix: ${failed.map((f) => f.name).join(", ")}`
+          : null,
+    },
+    duration_ms: Date.now() - startMs,
+    errors: failed.map((f) => f.name),
+    ts: nowBJ(),
+    // legacy fields
+    passed: passes,
+    checks: results,
     action_required:
       failed.length > 0 ? `Fix: ${failed.map((f) => f.name).join(", ")}` : null,
   };
 
+  reportToHelix(report, root);
   console.log(JSON.stringify(report, null, 2));
 }
 

@@ -4,7 +4,21 @@ const path = require("path");
 const { spawnSync } = require("child_process");
 
 const SKILL_DIR = __dirname;
-const PROJECT_DIR = path.resolve(SKILL_DIR, "..", "..", "..");
+// PROJECT_DIR：优先用 process.cwd()（Stop hook 触发时是用户当前工作目录）
+// 兼容旧路径推断（开发期直接 node 跑）：如果 cwd 没有 _meta/progress.md 但 ../../../有，回退
+const _CWD = process.cwd();
+const _CWD_HAS_PROGRESS = fs.existsSync(
+  path.join(_CWD, "_meta", "progress.md"),
+);
+const _LEGACY_DIR = path.resolve(SKILL_DIR, "..", "..", "..");
+const _LEGACY_HAS_PROGRESS = fs.existsSync(
+  path.join(_LEGACY_DIR, "_meta", "progress.md"),
+);
+const PROJECT_DIR = _CWD_HAS_PROGRESS
+  ? _CWD
+  : _LEGACY_HAS_PROGRESS
+    ? _LEGACY_DIR
+    : _CWD;
 const PROGRESS_PATH = path.join(PROJECT_DIR, "_meta", "progress.md");
 const CURSOR_PATH = path.join(SKILL_DIR, "logs", "push-cursor.json");
 const RUNS_LOG = path.join(SKILL_DIR, "logs", "runs.jsonl");

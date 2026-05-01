@@ -1,7 +1,21 @@
 "use strict";
-const { execSync } = require("child_process");
+const { execSync, spawnSync } = require("child_process");
 const fs = require("fs");
 const path = require("path");
+
+const SKILL_DIR = __dirname;
+const HELIX_RUN = path.join(process.cwd(), "skills", "helix", "run.cjs");
+const RUNS_LOG = path.join(SKILL_DIR, "logs", "runs.jsonl");
+const PHASE = "a2-repo-sensor";
+
+function nowBJ() {
+  const bj = new Date(Date.now() + 8 * 3600 * 1000);
+  const p = (n) => String(n).padStart(2, "0");
+  return (
+    `${bj.getUTCFullYear()}-${bj.getUTCMonth() + 1}-${bj.getUTCDate()} ` +
+    `${p(bj.getUTCHours())}:${p(bj.getUTCMinutes())}:${p(bj.getUTCSeconds())}`
+  );
+}
 
 const IGNORE = [
   "node_modules",
@@ -78,9 +92,9 @@ function findKeyFiles(root) {
 }
 
 function main() {
+  const startMs = Date.now();
   const root = process.cwd();
-  const now = new Date();
-  const ts = `${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()} ${now.getHours().toString().padStart(2, "0")}:${now.getMinutes().toString().padStart(2, "0")}`;
+  const ts = nowBJ();
 
   const recentCommits = run("git log --oneline -10")
     .split("\n")
@@ -117,12 +131,53 @@ function main() {
   };
 
   const out = JSON.stringify(ctx, null, 2);
-  console.log(out);
 
   // Write to tmp for helix to read
   const tmpPath = path.join(root, "_tmp_repo_ctx.json");
   fs.writeFileSync(tmpPath, out, "utf-8");
   process.stderr.write(`[a2-repo-sensor] RepoContext written to ${tmpPath}\n`);
+
+  // Ralph passes 判定：成功扫到根目录 + 至少识别 1 项（key_file/tech/commit）即 pass
+  const passes =
+    ctx.key_files.length > 0 ||
+    ctx.tech_stack.length > 0 ||
+    ctx.recent_commits.length > 0;
+  const result = {
+    phase: PHASE,
+    passes,
+    summary: passes
+      ? `扫到 ${ctx.tech_stack.join("/") || "未知栈"}，${ctx.key_files.length} 个关键文件，${ctx.dirty_files.length} 个脏文件`
+      : "未识别到任何技术栈/关键文件/提交记录",
+    output: {
+      tech_stack: ctx.tech_stack,
+      key_files: ctx.key_files,
+      dirty_count: ctx.dirty_files.length,
+      tmp_path: tmpPath,
+    },
+    duration_ms: Date.now() - startMs,
+    errors: passes ? [] : ["empty_repo_context"],
+    ts,
+  };
+
+  // 1) 自留底
+  fs.mkdirSync(path.dirname(RUNS_LOG), { recursive: true });
+  const line = JSON.stringify({
+    ...result,
+    user_feedback: { rating: null, fix_notes: null },
+  });
+  JSON.parse(line);
+  fs.appendFileSync(RUNS_LOG, line + "\n", "utf-8");
+
+  // 2) 上报 helix（领导汇报）
+  if (fs.existsSync(HELIX_RUN)) {
+    spawnSync("node", [HELIX_RUN, "--report", PHASE, JSON.stringify(result)], {
+      stdio: "inherit",
+      cwd: root,
+    });
+  }
+
+  // 3) stdout 给 LLM（保留原 RepoContext 全文，让 LLM 用）
+  console.log(out);
 }
 
 main();

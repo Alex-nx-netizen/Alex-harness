@@ -1,13 +1,19 @@
-# Runtime state & cursor
-.claude/skills/*/logs/
-.claude/skills/*/tmp/
-_meta/context-snapshots/
-_tmp_*.json
-*.bak
+﻿# Alex-harness — keep skill runtime artifacts out of git
+skills/*/logs/
+skills/*/tmp/
 
-# OS
-Thumbs.db
-.DS_Store
+# Helix runtime state
+_meta/.helix-current-run.json
+_tmp_repo_ctx.json
+_tmp_sr_record.json
 
 # Node
 node_modules/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Context-curator machine output (snapshots regenerated each run)
+_meta/context-snapshots/
