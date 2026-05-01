@@ -7,7 +7,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/.claude/skills/session-reporter/run.cjs\""
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/skills/session-reporter/run.cjs\""
           }
         ],
         "description": "Auto-push session completion log to Feishu Base on Stop",
