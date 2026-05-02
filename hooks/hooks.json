@@ -1,18 +1,4 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
-  "hooks": {
-    "_disabled_Stop_2026-5-1": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/skills/session-reporter/run.cjs\""
-          }
-        ],
-        "description": "DISABLED 2026-5-1 due to ENOENT loop flooding Feishu IM. Re-enable after v0.3.1 fix verified. See _meta/findings.md.",
-        "id": "stop:session-reporter"
-      }
-    ]
-  }
+  "hooks": {}
 }
