@@ -38,17 +38,25 @@ function main() {
   );
   const passes = missing.length === 0;
 
+  // helix Step 5.5 输出：把强匹配的 skill 名（含 namespace 前缀）暴露给 a5
+  // 数据来源：LLM 在 5.5 阶段把强匹配 skill 列表写进 task_card.preferred_skills
+  // 形如：["knowledge-curator", "lark-doc", "canghe-url-to-markdown"]
+  const preferredSkills = Array.isArray(card.preferred_skills)
+    ? card.preferred_skills.filter((s) => typeof s === "string" && s.trim())
+    : [];
+
   const result = {
     phase: PHASE,
     passes,
     summary: passes
-      ? `TaskCard 校验通过（type=${card.type}, scope=${card.scope}），等 LLM 按 SKILL.md §2 出 2-3 个方案`
+      ? `TaskCard 校验通过（type=${card.type}, scope=${card.scope}），preferred_skills=${preferredSkills.length} 项，等 LLM 按 SKILL.md §2 出 2-3 个方案`
       : `TaskCard 缺字段：${missing.join(", ")}`,
     output: {
       task_card_validated: passes ? card : null,
       missing_fields: missing,
+      preferred_skills: preferredSkills,
       next_step: passes
-        ? "LLM 按 a4-planner/SKILL.md §2 生成 PlanDoc（含推荐方案）"
+        ? "LLM 按 a4-planner/SKILL.md §2 生成 PlanDoc（含推荐方案）；preferred_skills 必须透传到 a5-executor 入参"
         : "回到 a1-task-understander 补全 TaskCard",
     },
     duration_ms: Date.now() - startMs,

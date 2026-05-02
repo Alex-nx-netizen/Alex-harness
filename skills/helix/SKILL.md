@@ -44,7 +44,9 @@ node skills/helix/run.cjs --start "<用户的任务描述>"
 
 **LLM 在 Step 1 输出 JSON 后，必须用一句中文提示用户**（即使用户没问也要主动说），格式参考：
 
-> 📊 Dashboard 已就绪：http://localhost:7777（status=already_running）— 浏览器打开可看到 a1-a8 phase 实时进度、skill 状态和本次 helix run 详情。
+> 📊 Dashboard 已就绪: http://localhost:7777 (status=already_running) — 浏览器打开可看到 a1-a8 phase 实时进度、skill 状态和本次 helix run 详情。
+>
+> ⚠ URL 后必须用 ASCII 半角空格 + 半角括号 ` (...)` 包状态，**不要**用全角 `（）`——会让终端把 `（status=...)` 吃进 URL，链接点不对（参见 v0.5.1 修复）。
 
 不打开也不影响 helix 流程；这是给用户的可观察性入口。
 
@@ -63,13 +65,15 @@ node skills/helix/run.cjs --start "<用户的任务描述>"
 
 | Step | 命令 | 何时跳过 |
 |---|---|---|
+| 0.5 | `node skills/mode-router/run.cjs --coarse "<task>"` （**Step 5.7 细判前的预判**，见 §2.6）| 永不跳过 |
 | 3 | `node skills/a1-task-understander/run.cjs '{"task":"..."}'` | 永不跳过 |
 | 4 | `node skills/a2-repo-sensor/run.cjs` | 永不跳过 |
 | 5 | `node skills/a3-retriever/run.cjs '{"keywords":[...]}'` | task scope 已明确时可跳 |
 | 5.5 | **skill 最优选择**（LLM 行为约束，不跑脚本，见下方 §2.5） | 永不跳过 |
 | 6 | `node skills/a4-planner/run.cjs '<task_card>'` | 永不跳过 |
-| 7 | **用户确认 plan**（不跳过；Ralph 反对自宣告完成）|
-| 8 | `node skills/a5-executor/run.cjs '{"plan":...,"user_confirmed":true}'` | 仅 research 类任务可跳 |
+| 5.7 | `node skills/mode-router/run.cjs --fine '{"task":"...","files_changed_count":N,"steps_count":N}'` （**100% 精确硬契约**，见 §2.7）| 永不跳过 |
+| 7 | **用户确认 plan + mode**（不跳过；Ralph 反对自宣告完成）|
+| 8 | `node skills/a5-executor/run.cjs '{"plan":...,"user_confirmed":true,"preferred_skills":[...],"skills_used":[...],"mode":"<solo\|team>","team_type":"<subagent\|peer_review>","subagent_run_ids":[...]}'` | 仅 research 类任务可跳 |
 | 9 | `node skills/a6-validator/run.cjs` | 仅纯文档任务可跳 |
 | 10 | `node skills/a7-explainer/run.cjs` | 无变更可跳 |
 
@@ -91,6 +95,13 @@ a3-retriever 输出 keywords + scope 后，**a4-planner 之前**，必须执行 
 - 候选 skill 全弱/无匹配 → plan 走 general-purpose 路径，但 §2.5 仍要留笔（在 progress 里写"扫过 X 个 skill 都不匹配，故自行实现"），便于将来沉淀新 skill
 - **铁律**：**禁止**没扫 skill 就直接进 a4-planner
 
+**v0.5.1 机器闭环**（不是装饰，是 passes 判据）：
+- a4-planner 把 `task_card.preferred_skills` 透传到 `output.preferred_skills`
+- a5-executor 入参必须含 `skills_used: [...]`（LLM 实际调用的 skill 名清单）
+- a5 校验：若 `preferred_skills` 非空且 `skills_used` 一个都没覆盖 → `passes=false, errors:["skipped_recommended_skill"]`，阻断 finalize
+- 合规绕过：传 `skills_bypassed_reason: "<≥10 字符理由>"`（例：CDP 启动失败、skill 自身有 bug）→ 视为 explicit_bypass，pass 通过但 5.5 留痕
+- 名字匹配宽松：`ecc:foo` 可匹配 `foo`（前缀变体兼容）
+
 **示例：**
 
 ```
@@ -100,6 +111,55 @@ a3-retriever 输出 keywords + scope 后，**a4-planner 之前**，必须执行 
 → Step 5.5.3 写入 task_card.preferred_skills = ["session-reporter", "lark-im"]
 → Step 6 a4-planner 见到这两条会输出"复用 session-reporter 框架 + lark-im 发消息"，而非"自己写一个 IM 客户端"
 ```
+
+### §2.6 Step 0.5：mode-router 粗判（必跑）
+
+> **来源**：Alex 2026-5-3 — "根据用户输入的内容复杂度判断单 agent 还是 team 模式"
+> **作用**：在 a1 之前给 a4 提前打 buff，让 plan 知道任务大致复杂度
+
+```bash
+node skills/mode-router/run.cjs --coarse "<用户原话任务描述>"
+```
+
+输出 `{mode, team_type, score, breakdown, enforcement}`：
+- 评分维度：显式 solo/team 词、并行词、跨前后端域、任务长度 >150 字、重构/迁移词
+- 阈值 ≥3 → team；否则 solo
+- **粗判仅是参考**——最终决策以 §2.7 Step 5.7 细判为准，不可绕过
+
+### §2.7 Step 5.7：mode-router 细判（**100% 精确硬契约**，必跑）
+
+> **核心**：这是 v0.6 Alex 主诉求"team / solo 自动判断"的执行端
+
+a4-planner 出 plan 后立即跑（Step 6 → 5.7 → 7），把 plan 信号喂回 mode-router：
+
+```bash
+node skills/mode-router/run.cjs --fine '{
+  "task": "<原任务>",
+  "files_changed_count": <a4 plan 中改动文件数>,
+  "steps_count": <a4 plan 中步骤数>
+}'
+```
+
+输出（关键字段）：
+- `mode`：`solo` 或 `team`（**不可绕过的最终决策**）
+- `team_type`：`subagent`（并行）或 `peer_review`（一写一审）
+- `team_plan.agents[]`：mode=team 时直接产出**具体 Agent 调用清单**（含 `subagent_type` + `prompt`），LLM 只需"复制粘贴"调 Agent tool
+- `enforcement.directive`：硬契约执行指令
+- `contract.bypass_allowed`: **false**（不允许绕过）
+
+**LLM 行为契约（必须执行）**：
+
+| 5.7 输出 mode | LLM 必须做的 | a5 入参约束 |
+|---|---|---|
+| `solo` | 直接进 a5 逐文件改 | `mode:"solo", subagent_run_ids:[]` |
+| `team/subagent` | 按 `team_plan.agents[]` 调 N 次 Agent tool（一个消息多个 tool 调用，并行） | `mode:"team", team_type:"subagent", subagent_run_ids:["<id1>","<id2>",...]` |
+| `team/peer_review` | 串行调 2 次 Agent：implementer → reviewer | `mode:"team", team_type:"peer_review", subagent_run_ids:["<implementer_id>","<reviewer_id>"]` |
+
+**a5-executor 卡点（无 bypass）**：
+- mode=team → `subagent_run_ids` 必须 ≥1 个 ≥4 字符 → 否则 `passes=false, errors:["team_mode_no_subagents"]`
+- mode=solo → `subagent_run_ids` 必须为空 → 否则 `passes=false, errors:["solo_mode_with_subagents"]`（防伪派）
+
+**与 v0.5.1 Q1 决议一致**：硬卡，不允许 bypass。撒谎填假 ID 仍能过机器层，但每次 a5/mode-router 决策都进 helix-runs.jsonl 留痕，人审兜底。
 
 ### Step 任意：风险守护（按需 inject）
 
@@ -123,11 +183,13 @@ node skills/helix/run.cjs --finalize
 
 | Phase | passes=true 条件 |
 |---|---|
+| mode-router-coarse (0.5) | 总是 passes=true（仅决策，不卡 finalize）|
 | a1-task-understander | 任务描述非空 |
 | a2-repo-sensor | 至少识别 1 项（key_file / tech_stack / commit）|
 | a3-retriever | 提供了 keywords 或 scope |
-| a4-planner | TaskCard 含 type + scope + done_criteria |
-| a5-executor | 有 plan + user_confirmed=true |
+| a4-planner | TaskCard 含 type + scope + done_criteria（preferred_skills 透传到 output）|
+| mode-router-fine (5.7) | 总是 passes=true（决策本身不失败；不合规通过 a5 卡点暴露）|
+| a5-executor | plan + user_confirmed=true + 5.5 闭环(skills) + 5.7 闭环(mode×subagent_run_ids) 全过|
 | a6-validator | 所有检查通过（或无检查可跑）|
 | a7-explainer | git status 检测到变更 |
 | a8-risk-guard | LOW 自动通过；HIGH/CRITICAL 必须 user_confirmed=true |
@@ -185,20 +247,23 @@ node skills/helix/run.cjs --finalize
 
 ```
 helix（领导，唯一 / 命令）
+ ├─ mode-router (Step 0.5)  ← phase（粗判 solo/team，v0.6 提为主链）
  ├─ a1-task-understander    ← phase
  ├─ a2-repo-sensor          ← phase
  ├─ a3-retriever            ← phase
  ├─ a4-planner              ← phase
- ├─ a5-executor             ← phase
+ ├─ mode-router (Step 5.7)  ← phase（细判 + 100% 精确硬契约，v0.6 提为主链）
+ ├─ a5-executor             ← phase（含 5.5 + 5.7 双闭环卡点）
  ├─ a6-validator            ← phase
  ├─ a7-explainer            ← phase
  ├─ a8-risk-guard           ← phase（按需 inject）
- ├─ context-curator         ← 治理元（被 helix 内部调用）
- ├─ mode-router             ← 治理元
- ├─ knowledge-curator       ← 治理元
- ├─ evolution-tracker       ← 治理元（消费 logs）
- └─ session-reporter        ← 治理元（Stop hook 自动跑）
+ ├─ context-curator         ← 治理元（待接入 v0.7）
+ ├─ knowledge-curator       ← 治理元（待接入 v0.7）
+ ├─ evolution-tracker       ← 治理元（待接入 v0.7）
+ └─ session-reporter        ← 治理元（Stop hook 跑，待 v0.7 加 helix_run_id 关联）
 ```
+
+**待办（v0.7 接入清单）**：context-curator / knowledge-curator / evolution-tracker / session-reporter 这 4 个治理元目前 SKILL.md §7 列着，但 helix/run.cjs 不调用——和 mode-router 升级前是同一种洞。v0.6 已先把 mode-router 接通。
 
 13 个下属的 SKILL.md 仍存在（提示词层 + LLM 加载），但**它们不再是顶级 / 命令**——`.claude-plugin/plugin.json` 已改为只暴露 `./skills/helix`。
 

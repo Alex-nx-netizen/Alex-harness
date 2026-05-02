@@ -1,6 +1,6 @@
 {
   "name": "alex-harness",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Personal SDLC harness — /helix is the only entrypoint, orchestrating a1-a8 phases under a Ralph passes contract. All phase reports converge on _meta/helix-runs.jsonl.",
   "author": {
     "name": "Alex-nx-netizen",

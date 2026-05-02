@@ -6,6 +6,81 @@
 
 ## 2026-5-3
 
+### 会话 26：v0.6.0 — mode-router 双阶段路由 + 100% 精确硬契约（5.7 闭环）
+
+- 🧠 **触发**：Alex 问"项目有没有按输入复杂度自动判断 team / solo？" → 审查发现 **mode-router 写完没接 helix**，等于装饰；**14 skill 中 9 处都没接入 helix 入口**（context-curator / knowledge-curator / evolution-tracker / session-reporter / hooks.json / live-events 缺 helix_run_id 等）
+- 🧱 **核心结论**：和 5.5 闭环 / dashboard 自启 / mode-router 是同一种洞——**SKILL.md 文档式接入 ≠ 代码式接入**。Ralph 二元契约只对 a1-a8 生效
+- 🛠 **改动（C 方案：双阶段路由 + 强化）**：
+  - `skills/mode-router/run.cjs` v0.1 → v0.2：
+    - 加 `--coarse <task>`（Step 0.5 粗判）和 `--fine <plan-json>`（Step 5.7 细判）子命令
+    - 多维评分：显式词±999 / 并行+2~4 / 审查+3 / 跨前后端+2 / 任务长+1 / 重构+1 / files>10 +3 / files>5 +2 / steps>15 +2 / steps>8 +1
+    - 阈值 ≥3 → team；team_type = peer_review (review 词) or subagent
+    - mode=team 时直接产出 `team_plan.agents[]`（含 subagent_type + prompt），LLM 只需"复制粘贴"调 Agent tool
+    - 加 `enforcement.directive` + `contract.bypass_allowed=false`（按 Alex "100% 精确"指令，取消所有 bypass）
+    - 每次执行向 helix `--report` 上报（mode-router-coarse / mode-router-fine 两个新 phase 名）
+  - `skills/a5-executor/run.cjs` v0.5.1 → v0.6.0：
+    - 新入参 `mode` / `team_type` / `subagent_run_ids[]`
+    - **5.7 硬契约**（无 bypass）：
+      - mode=team → subagent_run_ids 必须 ≥1 个 ≥4 字符 → 否则 `passes=false, errors:["team_mode_no_subagents"]`
+      - mode=solo → subagent_run_ids 必须为空 → 否则 `passes=false, errors:["solo_mode_with_subagents"]`（防伪派）
+      - mode 缺失 → 兼容旧任务，跳过检查
+    - passes = hasPlan && confirmed && skillsCheckPasses && **modeCheckPasses**
+  - `skills/helix/SKILL.md`：
+    - phase 链 §2 加 Step 0.5（粗判）+ Step 5.7（细判）
+    - 新增 §2.6 / §2.7 段：粗判说明 + 100% 精确硬契约说明
+    - §3 passes 表加 mode-router-coarse / -fine 两行 + a5 行升级
+    - §7 治理元图把 mode-router 提升为主链（前后两个 hook 点）
+    - §7 加"v0.7 待接入清单"4 项（context-curator / knowledge-curator / evolution-tracker / session-reporter）
+  - `skills/helix/run.cjs` PHASES_DEFAULT 加 `mode-router-coarse` 和 `mode-router-fine`
+  - `.claude-plugin/plugin.json` 0.5.1 → 0.6.0
+  - `.claude-plugin/marketplace.json` 0.3.0 → 0.6.0（修历史漂移：0.4/0.5 都没同步过这个文件）
+  - 同步 5 个 skill 文件到 plugin cache (diff -q 全 OK)
+- ✅ **13 项测试通过**：
+  - mode-router 6 cases：
+    - T1 "修个 typo" → solo (score=0)
+    - T2 "前端+后端 同时做" → team/subagent (score=6)
+    - T3 显式 solo 覆盖 → solo (-999)
+    - T4 小 plan (3 文件 4 步) → solo
+    - T5 大 plan (12 文件 12 步) "重构 OAuth" → team/subagent fan_out=3
+    - T6 "独立 review" → team/peer_review (review +3 短路)
+  - a5 7 cases：mode=team 无 IDs → FAIL；team+ID → PASS；ID 太短 → FAIL；solo+无 IDs → PASS；solo 伪派 → FAIL；无 mode 兼容 → PASS；同时违反 5.5+5.7 → 优先报 5.5 错
+- 🚧 **未做（v0.7 路线）**：
+  - context-curator / knowledge-curator / evolution-tracker / session-reporter helix 接入
+  - hooks/hooks.json 当前是 `{}` 空壳，dashboard-emit hook 未注册（全靠用户全局 settings）
+  - live-events.jsonl 缺 helix_run_id 字段（dashboard 拿不到 hook 事件 ↔ helix run 关联）
+- 🧠 **判断标准对话**：Alex 看了评分表后审查通过；保留 review 加权 +3、跨域 +2、阈值 3；这些都是**规则可读**的算法，可直接调权重
+- 📌 **强观点留底**：用户提的"应用价值评估"上次会话讨论过，未实施；下次进 v0.7 时考虑 a0-value-checker 或扩 a1 输出
+
+### 会话 25：v0.5.1 — URL 半角化 + 5.5 闭环机器化
+
+- 🧠 **触发**：Alex 看 flutter 任务 helix 跑出的截图，提两问：(1) 终端把 `http://localhost:7777（status=missing` 整段当成一个 URL，点不到正经地址。(2) Step 5.5 列出强匹配 skills（knowledge-curator / lark-doc / canghe-url-to-markdown），但 a5 直接调 WebFetch，**根本没用上**——5.5 是装饰
+- 🔍 **审计结论（两个都是真 bug）**：
+  - URL bug 根因：`run.cjs:184` + `SKILL.md:47` 用了**全角 `（）`**(U+FF08/FF09) 紧贴 URL，终端 URL 识别器只在 ASCII 空格 / `()[]<>` 处停，全角括号被当 URL 字符吃进去
+  - 5.5 闭环洞：a4-planner/run.cjs 只校验 `type+scope+done_criteria`，从不读 `preferred_skills`；a5-executor/run.cjs 只校验 `plan+confirmed`，也不查 skill 用没用——SKILL.md §2.5 写的"必须复用强匹配 skill"纯 LLM 行为约束，无机器卡点
+- 🛠 **改动（4 文件，单 sprint 闭环）**：
+  - `skills/helix/run.cjs:184`：`（${dashboardStatus}）` → ` (status=${dashboardStatus}) `（半角 + 前后空格）
+  - `skills/helix/SKILL.md:47`：同上 + 加一行 ⚠ 警示防止再犯
+  - `skills/a4-planner/run.cjs`：抽 `task_card.preferred_skills` 透传到 `output.preferred_skills`（非 passes 必要条件，仅暴露给 a5 看）
+  - `skills/a5-executor/run.cjs`：3 段式 passes 判定 = `hasPlan && confirmed && skillsCheckPasses`；新入参 `preferred_skills` / `skills_used` / `skills_bypassed_reason`；覆盖判定容错 `ecc:foo` ≈ `foo`（前缀变体）；显式 bypass 需 `≥10 字符理由`
+  - `skills/helix/SKILL.md` §2.5 加"v0.5.1 机器闭环"段；§3 passes 表更新 a4/a5 行；§2 Step 8 命令行加 `preferred_skills + skills_used` 入参
+  - `.claude-plugin/plugin.json`: 0.5.0 → 0.5.1
+  - 同步 4 文件到 plugin cache（diff -q 全 OK）
+- ✅ **9 项测试通过**（直跑 run.cjs，stdout JSON 校验）：
+  - T1 a4 透传 preferred_skills ✅
+  - T2 a5 覆盖 1/2 → PASS ✅
+  - T3 a5 全 bypass → FAIL `["skipped_recommended_skill"]` ✅
+  - T4 显式 bypass + 10+ 字符 reason → PASS ✅
+  - T5 reason 太短（`lazy`）→ FAIL ✅
+  - T6 无 preferred_skills（向后兼容）→ PASS ✅
+  - T7 `ecc:dart-flutter-patterns` ≈ `dart-flutter-patterns` 前缀变体 → PASS ✅
+  - T8 missing_plan ✅
+  - T9 missing_user_confirmation ✅
+- 🧱 **结构性意义**：5.5 从"LLM 行为约束文字"变成"机器卡点"——Ralph 二元契约首次进入 a5。LLM 想绕 skill 必须显式留笔，否则 finalize 出 `promise=NOT_COMPLETE`
+- 🚧 **未做（next）**：
+  - dashboard server 文件本次仍 `status=missing`（截图项目工作目录是 flutter，没 dashboard/server.js）——这个不是 helix bug，是新项目目录原生缺，不在本次范围
+  - SKILL.md §3 passes 表里 a5 那行写得偏长，将来 a6/a7 升级时统一收紧
+  - 没补 `_meta/findings.md`（这次没踩坑死路，只是结构性洞填补）
+
 ### 会话 24：helix 入口接 dashboard 自检+提示（A+B 落地）
 
 - 🧠 **触发**：Alex 问"调用 helix 入口时 dashboard 会自动运行吗？会不会提醒用户？"——审计代码后发现 `/helix` 入口完全黑盒：`run.cjs` 虽然 spawn 了 dashboard 但只往 stderr 打 URL，plan JSON（LLM 看到的 stdout）里没有 dashboard 字段；SKILL.md 也零提及，LLM 没信号去主动告知用户
@@ -639,3 +714,9 @@
 - task: dashboard v0.3 三处修复：1) 各视图加返回主界面入口；2) 验证数据实时性是否真到位；3) 消灭剩余黑空白
 - started → finished: 2026-5-2 18:18:13 → 2026-5-2 18:44:27
 
+
+### /helix run 2026-5-3-042326 · "审查 mode-router v0.2 是否真的接进 helix"
+- promise: **COMPLETE**
+- phases: mode✅ mode✅ a5✅
+- task: 审查 mode-router v0.2 是否真的接进 helix
+- started → finished: 2026-5-3 04:23:26 → 2026-5-3 04:23:31

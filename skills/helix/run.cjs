@@ -27,10 +27,13 @@ const HELIX_STATE = path.join(META_DIR, ".helix-current-run.json");
 const PROGRESS_MD = path.join(META_DIR, "progress.md");
 
 // helix 编排默认 phase 顺序（a8 按需 inject，不固定列；a3 retriever 也按需触发）
+// v0.6：mode-router 进主链——0.5 粗判 + 5.7 细判（100% 精确硬契约）
 const PHASES_DEFAULT = [
+  "mode-router-coarse",
   "a1-task-understander",
   "a2-repo-sensor",
   "a4-planner",
+  "mode-router-fine",
   "a5-executor",
   "a6-validator",
   "a7-explainer",
@@ -181,7 +184,7 @@ async function cmdStart(task) {
       note: "可选——不打开也不影响 helix 流程；但建议打开以监控 a1-a8 phase 实时状态",
     },
     instructions: [
-      `📊 Dashboard：${dashboardUrl}（${dashboardStatus}）— 建议打开浏览器查看实时进度`,
+      `📊 Dashboard: ${dashboardUrl} (status=${dashboardStatus}) — 建议打开浏览器查看实时进度`,
       "你必须严格按 phases 顺序执行；每个 phase 调用对应 run.cjs（脚本会自动 --report 给 helix）",
       "任何 phase passes=false → 立刻暂停 + 报告用户决策；不自动重试（Ralph 反对自宣告）",
       "破坏性操作（git push --force / rm -rf / drop / 改 CI 等）→ 强制 inject a8-risk-guard",
