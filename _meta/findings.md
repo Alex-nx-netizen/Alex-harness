@@ -5,6 +5,57 @@
 
 ## 已验证（Confirmed）
 
+### F-024: helix 流程缺"skill 最优复用"门槛——每次都从 a1 → a4 → a5 重写一遍，复用率为 0
+
+- **来源**: 2026-5-2 19:xx Alex 触发 /agent-teams-playbook 后给约束："每次任务选择最优 skills 使用，这入口 helix 进入的时候，注意一下"
+- **现象**: helix v0.2 phase 链是 a1 → a2 → a3 → a4 → a5 → a6 → a7（+a8）。a4-planner 在生成 plan 时**只看任务卡 + repo 信号**，**完全不看本项目已有 14 个 skill 或全局 ECC/superpowers/MCP skill 库**。结果：每次任务都在 a5-executor 里"白手起家"，已有 `knowledge-curator` 写飞书的能力、`session-reporter` 推 IM 的能力、`lark-im/doc/sheets` 一整套 CLI 工具，**全都跳过去自己重新写**。复用率 0。
+- **结论**: helix 在 a3-retriever 和 a4-planner 之间必须加一个**强制 skill 发现节点**（借鉴 agent-teams-playbook 阶段 1 的 3 步回退链），把"强匹配 skill"写进 task_card.preferred_skills，让 a4-planner 必须复用。
+- **修复**: skills/helix/SKILL.md 加 §2.5 Step 5.5（同步到 plugin cache 0.3.1）；§3 Phase passes 不加新行（这是 LLM 行为约束不是脚本）；§6 Ralph 接受清单加"skill 最优复用"。
+- **影响**:
+  - 立刻生效：下次 /helix 启动后，LLM 必须扫 skills/ 14 项 + system-reminder 里 available skills（含 ECC + superpowers + lark + ui-ux-pro-max）+ 必要时调 find-skills 拉外部
+  - 中期：跑过 5-10 次后回看 progress.md，统计"强匹配命中率"——若长期 0 命中，说明已有 skill 库不覆盖 Alex 任务类型，转向"沉淀新 skill"
+- **关联**:
+  - skills/helix/SKILL.md §2.5 / §6
+  - agent-teams-playbook §阶段1 Skill 完整回退链
+  - 蓝图：harness-blueprint.md "组织镜像" 元思想（让镜子里看到自己已经有什么）
+
+---
+
+### F-023: 在 Windows 写出的 markdown 文件（CRLF 行尾）经 `.split("\n")` 后正则 `(.+)$` 会全部失败
+
+- **来源**: 2026-5-2 17:55 dashboard v0.3 evolution 视图升级后 `/api/evolution.progress` 永远返回 0 条；本地 `cat -A progress.md` 看到每行末尾是 `\r$\n$`（CRLF）。
+- **现象**: `for (const line of fs.readFileSync(file, "utf8").split("\n"))` 后 `line` 仍带 `\r`。JS 正则 `^(#{2,3})\s+(.+)$`：
+  - `.` 不匹配 `\n` 但 **不匹配 `\r` 也不匹配**（与 PCRE 不同）
+  - `(.+)` 贪婪到 `2026-5-2`（停在 `\r` 前），然后 `$` 检查"end-of-string 或 newline 前"，发现 `\r` 不是 `\n` → 不匹配 → 整体回溯失败
+- **结论**: Windows / 跨平台代码读 markdown，必须用 `.split(/\r?\n/)` 或 `.replace(/\r/g, "")` 兜底，不能直接 `.split("\n")`。
+- **修复**: dashboard/server.js 里 `readProgressEntries` + `readFindings` 全部改 `/\r?\n/`。
+- **影响**: 所有读 `_meta/*.md` 的 helper；以后写 markdown 解析器一律走这个 split。
+- **关联**: 项目铁律 §工作约定 #8（写 JSON 后立即校验）—— 同精神扩展到"读 markdown 后立即抽样校验"，但这次是发现得早因为 UI 立刻可见。
+
+---
+
+### F-022: CSS Grid `auto 1fr auto` 行三段，底部 auto 内容过长会把 1fr 中段挤没
+
+- **来源**: 2026-5-2 17:03 dashboard v0.2 evolution 视图首跑—顶部 task_plan + 底部 findings 卡片墙都正确出，但中段"进展时间线"塌陷成只有标题条。/api/evolution 数据齐全（8 progress + 12 git + 22 findings）。
+- **现象**: `.evo-grid { grid-template-rows: auto 1fr auto }` + `.evo-mid { min-height: 0 }`。findings 卡片用 `repeat(auto-fill, minmax(280px, 1fr))` 多行展开，`.evo-bot` `auto` 行无 max → 撑到很大；`.evo-mid` 1fr 在 min-height: 0 下被压成 0。
+- **结论**: Grid 行 `auto` 没有 max 时会贪心拉满；想要"中段必占主体"需要让旁段都有 max，或者改用 flex column + 比例约束。
+- **修复**: 改 `.evo-grid` 为 flex column；`.evo-top { max-height: 220px }` `.evo-mid { flex: 1 }` `.evo-bot { max-height: 38% }`，三段各自 overflow:auto 独立滚动。
+- **影响**: 所有"三段竖排"布局的下游 skill UI——遵循"边段必须有 max-height，中段 1fr/flex-1"原则。
+- **关联**: §蓝图 3.B 观察层；dashboard-draft.md v0.2 §5.3。
+
+---
+
+### F-021: hook 时区校正用 `getTimezoneOffset()` 在 Beijing 系统下被抵消成 UTC
+
+- **来源**: 2026-5-2 16:39 hook 落地后看 jsonl `ts: "2026-5-2 08:39:00"`，与系统 `date` 输出 16:39 差 8 小时——明显时区错。
+- **现象**: 第一版 `bjTime` 写法是 `d.getTime() + d.getTimezoneOffset() * 60 * 1000 + 8h`。当系统已是 UTC+8（Beijing），`getTimezoneOffset()` 返回 -480（分钟），所以 `× 60 × 1000 = -8h`，加 8h offset → 净 0；再用 `getUTCHours()` 读 = UTC 时间，不是 Beijing。
+- **结论**: 想要"无论系统时区都吐 Beijing wall-clock"，正确公式是 `d.getTime() + 8 * 3600 * 1000` 然后用 `getUTCxxx()` 读。`getTime()` 已经是 UTC ms，与本地时区无关；不要二次加 `getTimezoneOffset()` 校正。
+- **修复**: 见 hooks/dashboard-emit.cjs `bjTime()`；同步 dashboard/server.js 同名函数。
+- **影响**: 所有"系统时区不可知 → 想要 Beijing 输出"的 helper（lark-cli 工具、dashboard）都要走这个公式。
+- **关联**: 项目铁律 §工作约定 #7（北京时间 YYYY-M-D HH:MM:SS）。
+
+---
+
 ### F-020: session-reporter Stop hook + saveCursor ENOENT bug 联手向飞书 IM 推了 30+ 条重复消息
 - **来源**: 2026-5-1 22:41 用户飞书截图：Dick's Process CLI bot 收到大量 `[里程碑]` / `2026-4-30` / `2026-4-29` 重复消息；同期终端 Stop hook 报 `ENOENT: no such file or directory, open '...0.3.0/skills/session-reporter/logs/push-cursor.json'`
 - **现象**: 每次会话 Stop 触发 hook → loadCursor() 因目录不存在返回空 → progress.md 全部会话被判"未推" → 全推飞书 Base + IM → saveCursor() writeFileSync 因目录缺失抛 ENOENT → cursor 没存住 → 下次 Stop 重复同样流程

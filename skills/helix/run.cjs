@@ -17,6 +17,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const { spawn } = require("child_process");
 
 const PROJECT_DIR = process.cwd();
 const META_DIR = path.join(PROJECT_DIR, "_meta");
@@ -118,6 +119,28 @@ function cmdStart(task) {
     task: taskStr,
     phase_reports: [],
   });
+
+  // Auto-start dashboard server (detached, ignore if already running)
+  const dashboardPort = parseInt(
+    process.env.HARNESS_DASHBOARD_PORT || "7777",
+    10,
+  );
+  const dashboardJs = path.join(PROJECT_DIR, "dashboard", "server.js");
+  if (fs.existsSync(dashboardJs)) {
+    const child = spawn(process.execPath, [dashboardJs], {
+      detached: true,
+      stdio: "ignore",
+      env: { ...process.env, HARNESS_DASHBOARD_PORT: String(dashboardPort) },
+    });
+    child.unref();
+  }
+  const dashboardUrl = `http://localhost:${dashboardPort}`;
+  console.error(
+    `\n${"━".repeat(56)}\n` +
+      `🟣  HARNESS Dashboard  →  ${dashboardUrl}\n` +
+      `    查看运行状态，随时可打开上方地址\n` +
+      `${"━".repeat(56)}\n`,
+  );
 
   const plan = {
     helix_run_id,

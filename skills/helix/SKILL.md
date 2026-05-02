@@ -53,11 +53,40 @@ node skills/helix/run.cjs --start "<用户的任务描述>"
 | 3 | `node skills/a1-task-understander/run.cjs '{"task":"..."}'` | 永不跳过 |
 | 4 | `node skills/a2-repo-sensor/run.cjs` | 永不跳过 |
 | 5 | `node skills/a3-retriever/run.cjs '{"keywords":[...]}'` | task scope 已明确时可跳 |
+| 5.5 | **skill 最优选择**（LLM 行为约束，不跑脚本，见下方 §2.5） | 永不跳过 |
 | 6 | `node skills/a4-planner/run.cjs '<task_card>'` | 永不跳过 |
 | 7 | **用户确认 plan**（不跳过；Ralph 反对自宣告完成）|
 | 8 | `node skills/a5-executor/run.cjs '{"plan":...,"user_confirmed":true}'` | 仅 research 类任务可跳 |
 | 9 | `node skills/a6-validator/run.cjs` | 仅纯文档任务可跳 |
 | 10 | `node skills/a7-explainer/run.cjs` | 无变更可跳 |
+
+### §2.5 Step 5.5：skill 最优选择（必跑）
+
+> **来源**：Alex 2026-5-2 19:xx —"每次任务选择最优 skills 使用，这入口 helix 进入的时候，注意一下"
+> 借鉴 `agent-teams-playbook` 阶段 1 的"Skill 完整回退链"。
+
+a3-retriever 输出 keywords + scope 后，**a4-planner 之前**，必须执行 3 步 skill 发现链，把"能复用现成 skill"标注进 plan，避免从头重写已有能力。
+
+| 步骤 | 动作 | 输出 |
+|---|---|---|
+| 5.5.1 | **本地 skill 扫描** — 列出本项目 `skills/` 下的 14 个 skill（a1-a8 + context-curator / evolution-tracker / helix / knowledge-curator / mode-router / session-reporter）+ `dashboard/api/skills` 当前状态 | 候选名单 + 状态 |
+| 5.5.2 | **全局/外部 skill 搜索** — 检查 system-reminder 里 available skills 列表（含 ECC、superpowers、ui-ux-pro-max 等）；若仍无匹配，调 `Skill(skill="find-skills", args="<task keywords>")` 拉外部 | 命中的 skill 名 + 用途 |
+| 5.5.3 | **匹配评估** — 对每个候选给"匹配度"（强/弱/无）；强匹配的 skill 写入 a4-planner 输入的 `task_card.preferred_skills` 数组 | preferred_skills 注入 plan |
+
+**判定规则**：
+- 候选 skill ≥1 强匹配 → 必须把它写入 plan，a5-executor 优先调用 skill 而非自行实现
+- 候选 skill 全弱/无匹配 → plan 走 general-purpose 路径，但 §2.5 仍要留笔（在 progress 里写"扫过 X 个 skill 都不匹配，故自行实现"），便于将来沉淀新 skill
+- **铁律**：**禁止**没扫 skill 就直接进 a4-planner
+
+**示例：**
+
+```
+任务："给 dashboard 加飞书消息推送"
+→ Step 5.5.1 本地扫描：knowledge-curator (写飞书 doc 工作流) ⭐强匹配；session-reporter (Stop hook 推飞书) ⭐强匹配
+→ Step 5.5.2 全局：lark-im / lark-doc / lark-shared 强匹配
+→ Step 5.5.3 写入 task_card.preferred_skills = ["session-reporter", "lark-im"]
+→ Step 6 a4-planner 见到这两条会输出"复用 session-reporter 框架 + lark-im 发消息"，而非"自己写一个 IM 客户端"
+```
 
 ### Step 任意：风险守护（按需 inject）
 
@@ -132,6 +161,7 @@ node skills/helix/run.cjs --finalize
 - `<promise>COMPLETE</promise>` 契约
 - progress.md 追加式学习日志
 - 单一事实源（helix-runs.jsonl 是镜像，state 在 .helix-current-run.json）
+- **skill 最优复用**（2026-5-2 加入）：每次进 a4-planner 前必扫 skill 列表，强匹配的必须复用，弱/无匹配才允许自行实现且必须留笔
 
 ❌ **反对**：
 - bash 外循环重跑 helix（违背可观察性）

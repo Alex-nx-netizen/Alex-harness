@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>HARNESS · Alex-harness Dashboard</title>
+  <link rel="icon" href="data:," />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/live" data-route title="回主界面">
+      <span class="logo">H</span>
+      <span class="name">HARNESS</span>
+      <span class="ver">v0.3</span>
+    </a>
+    <div class="crumbs" id="crumbs">
+      <span id="crumbHost">localhost:7777</span>
+      <span class="sep">·</span>
+      <span id="crumbTs">—</span>
+      <span class="sep">·</span>
+      <span class="badge-live" id="crumbBadge">LIVE</span>
+      <span class="sep">·</span>
+      <span id="crumbSid" class="muted">session —</span>
+    </div>
+    <div class="right">
+      <div class="conn" id="conn">
+        <span class="dot"></span>
+        <span id="connText">connecting…</span>
+      </div>
+      <span class="uptime" id="uptime">—</span>
+    </div>
+  </header>
+
+  <main id="view"></main>
+
+  <footer class="bottombar">
+    <span><kbd>F1</kbd> 总览</span>
+    <span><kbd>F2</kbd> 技能</span>
+    <span><kbd>F3</kbd> 时间线</span>
+    <span><kbd>F4</kbd> 情报</span>
+    <span class="sep">·</span>
+    <span><kbd>L</kbd> 实时</span>
+    <span><kbd>H</kbd> 历史</span>
+    <span><kbd>E</kbd> 升级</span>
+    <span class="sep">·</span>
+    <span id="footStat">—</span>
+    <span class="spacer"></span>
+    <a href="https://www.feishu.cn/wiki/UtW0wUbPbifCX4kk3ypcGcyinGg" target="_blank">Harness Wiki</a>
+    <span class="sep">·</span>
+    <span id="footSid">—</span>
+  </footer>
+
+  <script src="/app.js"></script>
+</body>
+</html>

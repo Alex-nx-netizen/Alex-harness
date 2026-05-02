@@ -1,0 +1,1504 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<title>HARNESS · 智能体终端 · v0.2</title>
+<meta name="viewport" content="width=1440"/>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;0,700;1,400&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   HARNESS v0.2 · 暖深灰 · JetBrains Mono
+   设计系统: VS Code One Dark Pro 变体 · 琥珀 accent
+   ============================================================ */
+:root {
+  /* ── 深紫黑 · 优雅主题 ── */
+  --bg:        #0c0a1a;
+  --panel:     #141027;
+  --sub:       #1d1838;
+  --hover:     #261f48;
+  --div:       #2e2757;
+  --bd:        #3d3568;
+  --bd-strong: #5046a0;
+
+  /* 文字 */
+  --t:         #d4d0f0;
+  --tt:        #ede9ff;
+  --st:        #8b85b8;
+  --mt:        #4d4876;
+
+  /* 主色：紫罗兰 */
+  --y:         #9d7cff;
+  --y-dim:     #6c4bd5;
+  --y-bg:      rgba(157,124,255,0.08);
+
+  /* 功能色 */
+  --a:         #fbbf24;   /* 琥珀，警告 */
+  --g:         #34d399;   /* 翠绿，成功/运行 */
+  --r:         #f87171;   /* 玫瑰红，错误 */
+  --c:         #60a5fa;   /* 天蓝，信息 */
+  --m:         #c084fc;   /* 紫粉，团队模式 */
+
+  /* 辅助 */
+  --g-glow:    rgba(52,211,153,0.3);
+  --r-glow:    rgba(248,113,113,0.25);
+  --y-glow:    rgba(157,124,255,0.35);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; overflow: hidden; }
+body {
+  background: var(--bg);
+  color: var(--t);
+  font-family: 'JetBrains Mono', 'Cascadia Mono', 'Consolas', ui-monospace, monospace;
+  font-size: 14px;
+  line-height: 1.5;
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
+}
+::selection { background: var(--y); color: #000; }
+
+/* ── 工具提示 ── */
+[data-tip] { position: relative; }
+[data-tip]::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: calc(100% + 7px);
+  left: 50%; transform: translateX(-50%);
+  background: #111;
+  color: var(--tt);
+  font-size: 11px;
+  padding: 4px 9px;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s;
+  z-index: 200;
+  border: 1px solid var(--bd-strong);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+}
+[data-tip]:hover::after { opacity: 1; }
+
+/* ── 顶部状态栏 ── */
+.strip {
+  position: fixed; top: 0; left: 0; right: 0; height: 36px;
+  background: linear-gradient(180deg, #110e24, #0c0a1a);
+  border-bottom: 1px solid var(--bd);
+  display: flex; align-items: center;
+  font-size: 12px; z-index: 20;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.35);
+}
+.strip-l { padding: 0 14px; display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+.strip-l .brand { color: var(--y); font-weight: 700; letter-spacing: 1.5px; font-size: 13px; }
+.strip-l .sep { color: var(--mt); }
+.strip-l .meta { color: var(--st); font-size: 12px; }
+.strip-l .live {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 1px 7px;
+  background: rgba(77,179,104,0.1);
+  border: 1px solid var(--g);
+  color: var(--g); font-weight: 700; font-size: 11px; letter-spacing: 1px;
+  text-shadow: 0 0 8px var(--g-glow);
+}
+.strip-l .live::before {
+  content: ''; width: 5px; height: 5px; background: var(--g);
+  border-radius: 50%; animation: pulse 1.4s ease-in-out infinite;
+  box-shadow: 0 0 5px var(--g);
+}
+.ticker {
+  flex: 1; overflow: hidden; position: relative; height: 34px;
+  mask-image: linear-gradient(90deg, transparent 0, #1c1c1c 40px, #1c1c1c calc(100% - 40px), transparent 100%);
+}
+.ticker-inner {
+  display: inline-flex; align-items: center; height: 34px;
+  white-space: nowrap; animation: tickerScroll 60s linear infinite;
+  gap: 28px; padding-left: 100%;
+}
+.ticker span { color: var(--st); font-size: 12px; }
+.ticker .k { color: var(--y); }
+.ticker .v { color: var(--tt); font-weight: 500; }
+.ticker .up { color: var(--g); }
+.ticker .dn { color: var(--r); }
+.strip-r { padding: 0 14px; display: flex; align-items: center; gap: 12px; flex-shrink: 0; color: var(--st); font-size: 12px; }
+.strip-r .conn-dot { width: 6px; height: 6px; background: var(--g); border-radius: 50%; box-shadow: 0 0 6px var(--g-glow); animation: pulse 1.8s ease-in-out infinite; }
+
+@keyframes pulse    { 0%,100%{opacity:1} 50%{opacity:0.35} }
+@keyframes blink    { 0%,100%{opacity:1} 50%{opacity:0.4} }
+@keyframes phaseRun { 0%{opacity:0.45} 100%{opacity:1} }
+@keyframes tickerScroll { 0%{transform:translateX(0)} 100%{transform:translateX(-100%)} }
+
+/* ── 整体布局 ── */
+.layout { position: fixed; top: 36px; left: 0; right: 0; bottom: 26px; display: flex; }
+
+/* ── 侧边栏 ── */
+.sidebar {
+  width: 230px; flex-shrink: 0;
+  background: var(--panel);
+  border-right: 1px solid var(--bd);
+  display: flex; flex-direction: column; overflow: hidden;
+  box-shadow: 3px 0 12px rgba(0,0,0,0.3);
+  z-index: 5;
+}
+.side-section { padding: 12px 15px; border-bottom: 1px solid var(--div); }
+.side-section.brand { padding: 16px 15px 14px; }
+.brand-line { display: flex; align-items: baseline; justify-content: space-between; }
+.brand-line .name { color: var(--y); font-weight: 700; font-size: 16px; letter-spacing: 2px; text-shadow: 0 0 12px rgba(212,168,67,0.25); }
+.brand-line .ver  { color: var(--mt); font-size: 11px; letter-spacing: 1px; }
+.brand-tag { color: var(--st); font-size: 11px; letter-spacing: 1.2px; margin-top: 3px; }
+
+.kv { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; font-size: 13px; }
+.kv .k { color: var(--st); letter-spacing: 0.3px; }
+.kv .v { color: var(--tt); font-weight: 500; }
+.kv .v.y { color: var(--y); }
+.kv .v.g { color: var(--g); }
+.kv .v.r { color: var(--r); }
+.kv .v.c { color: var(--c); }
+
+.side-title { color: var(--mt); font-size: 11px; letter-spacing: 1.2px; font-weight: 700; margin-bottom: 9px; }
+
+/* 导航 */
+.nav { flex: 1; overflow-y: auto; padding: 6px 0; min-height: 0; }
+.nav::-webkit-scrollbar { width: 4px; }
+.nav::-webkit-scrollbar-thumb { background: var(--bd); border-radius: 2px; }
+
+.nav-item {
+  display: flex; align-items: center;
+  padding: 9px 15px;
+  font-size: 14px; cursor: pointer; color: var(--t);
+  border-left: 2px solid transparent;
+  transition: background 0.12s, color 0.12s;
+}
+.nav-item:hover { background: var(--hover); color: var(--tt); }
+.nav-item.active { background: var(--y-bg); border-left-color: var(--y); color: var(--y); }
+.nav-item .fkey { width: 30px; font-size: 11px; color: var(--mt); font-weight: 700; letter-spacing: 0.3px; flex-shrink: 0; }
+.nav-item.active .fkey { color: var(--y); }
+.nav-item .label { flex: 1; letter-spacing: 0.5px; }
+.nav-item .badge {
+  font-size: 12px; padding: 1px 7px;
+  background: var(--sub); color: var(--st);
+  border: 1px solid var(--bd); font-weight: 600;
+  min-width: 26px; text-align: center;
+}
+.nav-item .badge.y { color: var(--y); border-color: var(--y); }
+.nav-item .badge.g { color: var(--g); border-color: var(--g); background: rgba(77,179,104,0.07); }
+.nav-item .badge.r { color: var(--r); border-color: var(--r); background: rgba(217,95,95,0.07); }
+.nav-item .badge.c { color: var(--c); border-color: var(--c); }
+.nav-item .badge.m { color: var(--m); border-color: var(--m); animation: blink 1.2s ease-in-out infinite; }
+
+/* Token 仪表 */
+.meter { margin-top: 9px; }
+.meter-row { display: flex; align-items: center; gap: 7px; font-size: 12px; margin-bottom: 7px; }
+.meter-row .lbl { color: var(--st); width: 34px; }
+.meter-row .bar { flex: 1; height: 5px; background: var(--sub); border: 1px solid var(--div); position: relative; overflow: hidden; border-radius: 3px; }
+.meter-row .num { color: var(--tt); font-weight: 600; font-size: 12px; min-width: 44px; text-align: right; }
+
+.hotkey-row { display: flex; justify-content: space-between; font-size: 12px; padding: 3px 0; color: var(--mt); }
+.hotkey-row kbd { background: var(--sub); color: var(--y); padding: 0 5px; border: 1px solid var(--bd); font-family: inherit; font-size: 11px; }
+
+/* ── 主区容器 ── */
+.main-wrapper { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
+
+/* ── 关键指标栏 ── */
+.metrics-bar {
+  height: 58px; flex-shrink: 0;
+  background: var(--panel);
+  border-bottom: 1px solid var(--bd);
+  display: flex; align-items: center;
+  padding: 0 4px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.25);
+}
+.metric {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 0 14px; border-right: 1px solid var(--div);
+  flex: 1; min-width: 0; cursor: default;
+  transition: background 0.12s;
+  height: 100%;
+}
+.metric:last-child { border-right: none; }
+.metric:hover { background: var(--hover); }
+.metric .m-lbl { color: var(--st); font-size: 11px; letter-spacing: 0.5px; font-weight: 500; margin-bottom: 4px; white-space: nowrap; }
+.metric .m-val { color: var(--tt); font-size: 18px; font-weight: 700; letter-spacing: 0.5px; line-height: 1; }
+.metric .m-val.y { color: var(--y); }
+.metric .m-val.g { color: var(--g); }
+.metric .m-val.r { color: var(--r); text-shadow: 0 0 8px var(--r-glow); }
+.metric .m-val.c { color: var(--c); }
+.metric .m-bar { width: 90%; height: 3px; background: var(--sub); border-radius: 2px; margin-top: 5px; overflow: hidden; }
+.metric .m-bar-fill { height: 100%; border-radius: 2px; transition: width 0.6s ease; }
+
+/* ── 视图切换 tab ── */
+.view-tabs {
+  height: 36px; flex-shrink: 0;
+  background: var(--sub);
+  border-bottom: 1px solid var(--bd);
+  display: flex; align-items: center;
+  padding: 0 14px; gap: 4px;
+}
+.view-tab {
+  padding: 5px 16px; font-size: 13px; font-weight: 700; letter-spacing: 0.8px;
+  cursor: pointer; color: var(--mt);
+  border: 1px solid transparent;
+  transition: all 0.12s;
+}
+.view-tab:hover { color: var(--t); background: var(--hover); }
+.view-tab.active { color: var(--y); border-color: var(--y); background: var(--y-bg); }
+
+/* ── 主内容网格 ── */
+.main {
+  flex: 1;
+  display: grid;
+  grid-template-rows: 40% 60%;
+  grid-template-columns: 40% 35% 25%;
+  gap: 1px; background: var(--bd);
+  overflow: hidden;
+}
+.main.team-mode { grid-template-columns: 32% 28% 20% 20%; }
+
+/* 视图模式 */
+.main.view-skills { grid-template-rows:1fr; grid-template-columns:1fr; }
+.main.view-skills .pane:not(.skills-pane){ display:none; }
+.main.view-skills .pane.skills-pane{ grid-row:1; grid-column:1; }
+
+.main.view-runs { grid-template-rows:1fr; grid-template-columns:1fr; }
+.main.view-runs .pane:not(.runs-pane){ display:none; }
+.main.view-runs .pane.runs-pane{ grid-row:1; grid-column:1; display:flex; }
+
+.main.view-detail { grid-template-rows:1fr; grid-template-columns:60% 40%; }
+.main.view-detail .pane.timeline{ grid-row:1; grid-column:1; display:flex; }
+.main.view-detail .pane.detail{ grid-row:1; grid-column:2; display:flex; }
+.main.view-detail .pane:not(.timeline):not(.detail){ display:none; }
+
+.main.view-intel { grid-template-rows:1fr; grid-template-columns:1fr; }
+.main.view-intel .pane:not(.intel-pane){ display:none; }
+.main.view-intel .pane.intel-pane{ grid-row:1; grid-column:1; display:flex; }
+
+.main.view-reporter { grid-template-rows:1fr; grid-template-columns:1fr; }
+.main.view-reporter .pane:not(.reporter-pane){ display:none; }
+.main.view-reporter .pane.reporter-pane{ grid-row:1; grid-column:1; display:flex; }
+
+.main.view-meta { grid-template-rows:1fr; grid-template-columns:1fr; }
+.main.view-meta .pane:not(.meta-pane){ display:none; }
+.main.view-meta .pane.meta-pane{ grid-row:1; grid-column:1; display:flex; }
+
+.pane {
+  background: var(--panel);
+  display: flex; flex-direction: column;
+  overflow: hidden; position: relative;
+  min-width: 0; min-height: 0;
+}
+.pane.timeline { grid-row:2; grid-column: 1 / span 2; }
+.pane.detail   { grid-row:2; grid-column: 3 / -1; }
+.main.team-mode .pane.timeline { grid-column: 1 / span 3; }
+.main.team-mode .pane.detail   { grid-column: 4 / -1; }
+.pane.agents { display: none; }
+.main.team-mode .pane.agents { display: flex; }
+
+/* 面板头 */
+.ph {
+  height: 34px; flex-shrink: 0;
+  background: var(--sub); border-bottom: 1px solid var(--bd);
+  display: flex; align-items: center;
+  padding: 0 13px; gap: 10px;
+}
+.ph-title { color: var(--y); font-size: 14px; font-weight: 700; letter-spacing: 1.5px; }
+.ph-meta  { color: var(--st); font-size: 12px; margin-left: auto; }
+.ph-tag   { font-size: 12px; padding: 1px 8px; border: 1px solid; letter-spacing: 0.8px; font-weight: 700; }
+.ph-tag.live { color: var(--g); border-color: var(--g); }
+.ph-tag.solo { color: var(--y); border-color: var(--y); }
+.ph-tag.team { color: var(--m); border-color: var(--m); animation: blink 1.4s ease-in-out infinite; }
+
+.pb { flex: 1; overflow: auto; min-height: 0; }
+.pb::-webkit-scrollbar { width: 6px; height: 6px; }
+.pb::-webkit-scrollbar-thumb { background: var(--bd); border-radius: 3px; }
+.pb::-webkit-scrollbar-track { background: var(--sub); }
+
+/* ── 技能筛选栏 ── */
+.skill-filters {
+  display: flex; align-items: center; gap: 5px;
+  padding: 7px 11px;
+  background: var(--sub); border-bottom: 1px solid var(--div);
+  flex-shrink: 0;
+}
+.sf-btn {
+  padding: 4px 12px; font-size: 12px; font-weight: 700; letter-spacing: 0.5px;
+  border: 1px solid var(--bd); background: transparent;
+  color: var(--st); font-family: inherit; cursor: pointer;
+  transition: all 0.12s;
+}
+.sf-btn:hover { color: var(--t); border-color: var(--bd-strong); }
+.sf-btn.active { color: var(--y); border-color: var(--y); background: var(--y-bg); }
+
+/* ── 技能网格 ── */
+.skills-grid { display: grid; grid-template-columns: repeat(2,1fr); gap: 1px; background: var(--bd); padding: 1px; }
+.skill {
+  background: var(--sub); padding: 8px 11px;
+  cursor: pointer; position: relative;
+  transition: background 0.1s;
+  display: flex; align-items: center; gap: 9px;
+}
+.skill:hover { background: var(--hover); }
+.skill.filtered::before { content:''; position:absolute; left:0; top:0; bottom:0; width:2px; background:var(--y); }
+.skill.hidden { display: none; }
+.skill .ico { width: 11px; flex-shrink:0; font-size:12px; line-height:1; text-align:center; font-weight:700; }
+.skill[data-state="running"] .ico { color:var(--g); animation:pulse 1.5s ease-in-out infinite; }
+.skill[data-state="done"]    .ico { color:var(--y); }
+.skill[data-state="idle"]    .ico { color:var(--mt); }
+.skill[data-state="error"]   .ico { color:var(--r); }
+.skill .body { flex:1; min-width:0; }
+.skill .nm { color:var(--tt); font-size:13px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.skill .det { color:var(--st); font-size:12px; margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.skill[data-state="running"] .nm { color:var(--g); }
+.skill[data-state="error"]   .nm { color:var(--r); }
+.skill[data-state="idle"]    .nm { color:var(--st); }
+.skill .age { font-size:12px; color:var(--mt); font-weight:600; flex-shrink:0; text-align:right; }
+.skill[data-state="running"] .age { color:var(--g); }
+.skill[data-state="done"]    .age { color:var(--y); }
+.skill[data-state="error"]   .age { color:var(--r); }
+
+/* ── 当前运行 ── */
+.run-block { padding: 11px 13px; border-bottom: 1px solid var(--div); }
+.run-id { color: var(--y); font-size: 14px; font-weight: 700; letter-spacing: 0.3px; }
+.run-task { color: var(--st); font-size: 12px; margin-top: 3px; line-height: 1.5; max-height: 36px; overflow: hidden; text-overflow: ellipsis; }
+.run-stat { display: flex; gap: 14px; margin-top: 9px; font-size: 13px; }
+.run-stat .col { display: flex; flex-direction: column; }
+.run-stat .lbl { color: var(--mt); font-size: 11px; letter-spacing: 0.8px; }
+.run-stat .val { color: var(--tt); font-weight: 700; }
+.run-stat .val.g { color: var(--g); }
+.run-stat .val.y { color: var(--y); }
+
+.phase-bar { display: flex; gap: 3px; margin-top: 13px; }
+.phase-cell { flex:1; height: 4px; background: var(--sub); border-radius: 3px; }
+.phase-cell.done    { background: var(--y); }
+.phase-cell.running { background: linear-gradient(90deg, var(--y), var(--g)); animation: phaseRun 1.4s ease-in-out infinite alternate; }
+.phase-cell.skipped { background: var(--bd); }
+.phase-cell.error   { background: var(--r); }
+
+.phase-list { padding: 7px 13px 13px; }
+.phase-row { display: flex; align-items: center; font-size: 13px; padding: 4px 0; gap: 9px; }
+.phase-row .num { color: var(--mt); width: 16px; font-weight: 700; }
+.phase-row .ico { width: 12px; text-align: center; font-weight: 700; }
+.phase-row .ico.done    { color: var(--y); }
+.phase-row .ico.running { color: var(--g); }
+.phase-row .ico.skipped { color: var(--mt); }
+.phase-row .ico.pending { color: var(--mt); }
+.phase-row .nm { flex:1; color:var(--t); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.phase-row.running .nm { color: var(--g); font-weight: 600; }
+.phase-row.skipped .nm { color: var(--mt); }
+.phase-row.pending .nm { color: var(--st); }
+.phase-row .ts { color: var(--mt); font-size: 12px; min-width: 64px; text-align: right; }
+.phase-row.running .ts { color: var(--g); }
+
+.run-actions { padding: 9px 13px 13px; display: flex; gap: 7px; border-top: 1px solid var(--div); flex-wrap: wrap; }
+.btn {
+  background: var(--sub); border: 1px solid var(--bd);
+  color: var(--st); font-family: inherit; font-size: 12px;
+  padding: 6px 13px; letter-spacing: 0.8px; font-weight: 700;
+  cursor: pointer; transition: all 0.12s;
+}
+.btn:hover { background: var(--hover); color: var(--y); border-color: var(--y); }
+.btn.primary { color: var(--y); border-color: var(--y-dim); }
+.btn.primary:hover { background: var(--y); color: #000; }
+.btn.danger  { color: var(--r); border-color: var(--r); }
+.btn.danger:hover { background: var(--r); color: #000; }
+.btn.active  { background: var(--m); color: #000; border-color: var(--m); }
+
+/* ── 情报中心 tabs ── */
+.tabs { display: flex; background: var(--sub); border-bottom: 1px solid var(--bd); flex-shrink: 0; }
+.tab {
+  flex:1; text-align: center;
+  font-size: 12px; font-weight: 700; letter-spacing: 0.8px;
+  padding: 9px 4px; cursor: pointer;
+  color: var(--mt); border-bottom: 2px solid transparent;
+  transition: color 0.12s, background 0.12s;
+}
+.tab:hover { color: var(--t); background: var(--hover); }
+.tab.active { color: var(--y); border-bottom-color: var(--y); background: var(--panel); }
+.tab .cnt { font-size: 11px; color: var(--st); margin-left: 4px; }
+.tab.active .cnt { color: var(--y); }
+
+.intel-list { padding: 4px 0; }
+.intel-row { padding: 8px 13px; border-bottom: 1px solid var(--div); cursor: pointer; transition: background 0.1s; }
+.intel-row:hover { background: var(--hover); }
+.intel-row .h { display: flex; align-items: baseline; gap: 9px; font-size: 13px; }
+.intel-row .id { color: var(--y); font-weight: 700; flex-shrink: 0; }
+.intel-row .tag { font-size: 11px; padding: 0 7px; border: 1px solid; letter-spacing: 0.5px; font-weight: 700; flex-shrink: 0; }
+.intel-row .tag.high { color: var(--r); border-color: var(--r); }
+.intel-row .tag.med  { color: var(--a); border-color: var(--a); }
+.intel-row .tag.low  { color: var(--c); border-color: var(--c); }
+.intel-row .tag.app  { color: var(--g); border-color: var(--g); }
+.intel-row .tag.pen  { color: var(--y); border-color: var(--y); }
+.intel-row .tag.rej  { color: var(--mt); border-color: var(--mt); }
+.intel-row .summ { color: var(--t); font-size: 13px; margin-top: 4px; line-height: 1.5; }
+.intel-row .meta { color: var(--mt); font-size: 12px; margin-top: 4px; }
+
+/* ── 时间线 ── */
+.tl-toolbar {
+  display: flex; align-items: center; gap: 9px;
+  padding: 6px 13px;
+  background: var(--sub); border-bottom: 1px solid var(--div);
+  flex-shrink: 0;
+}
+.filter-pill {
+  display: none; align-items: center; gap: 5px;
+  padding: 2px 8px; border: 1px solid var(--y);
+  color: var(--y); font-size: 12px; letter-spacing: 0.3px; font-weight: 700; cursor: pointer;
+}
+.filter-pill.active { display: inline-flex; }
+.filter-pill .x { color: var(--mt); margin-left: 3px; }
+.tl-stat { color: var(--st); font-size: 12px; }
+.tl-stat .v { color: var(--y); font-weight: 700; }
+
+.tl-row {
+  display: grid;
+  grid-template-columns: 26px 78px 1fr 78px 68px;
+  align-items: center;
+  padding: 8px 13px 8px 7px; gap: 9px;
+  border-bottom: 1px solid var(--div);
+  cursor: pointer; position: relative;
+  transition: background 0.08s; font-size: 13px;
+}
+.tl-row:hover { background: var(--hover); }
+.tl-row.selected { background: rgba(212,168,67,0.06); }
+.tl-row.selected::before { content:''; position:absolute; left:0; top:0; bottom:0; width:2px; background:var(--y); }
+.tl-row.is-error { background: rgba(217,95,95,0.04); }
+.tl-row.is-error.selected { background: rgba(217,95,95,0.1); }
+.tl-row .ic { text-align:center; font-weight:700; font-size:12px; }
+.tl-row .ic.run  { color:var(--g); animation:pulse 1.5s ease-in-out infinite; }
+.tl-row .ic.done { color:var(--y); }
+.tl-row .ic.err  { color:var(--r); }
+.tl-row .ts { color:var(--mt); font-size:12px; }
+.tl-row.selected .ts { color:var(--y); }
+.tl-row .body { display:flex; align-items:baseline; gap:9px; min-width:0; }
+.tl-row .skill-nm { color:var(--tt); font-weight:700; font-size:13px; flex-shrink:0; }
+.tl-row.is-error .skill-nm { color:var(--r); }
+.tl-row .arrow { color:var(--mt); font-size:11px; flex-shrink:0; }
+.tl-row .arg { color:var(--t); font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.tl-row .arg.accent { color:var(--c); }
+.tl-row .arg.is-error { color:var(--r); }
+.tl-row .dur { color:var(--y); font-weight:700; text-align:right; font-size:13px; }
+.tl-row.is-error .dur { color:var(--r); }
+.tl-row .tool { color:var(--mt); text-align:right; font-size:12px; }
+
+/* ── 事件详情 ── */
+.dt-meta { padding: 12px 14px; border-bottom: 1px solid var(--div); font-size: 13px; flex-shrink: 0; }
+.dt-meta .row1 { display: flex; align-items: baseline; gap: 9px; }
+.dt-meta .id { color: var(--y); font-weight: 700; }
+.dt-meta .arg { color: var(--t); font-size: 12px; flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.dt-meta .row2 { display: flex; gap: 6px; margin-top: 9px; flex-wrap: wrap; }
+.chip { font-size: 11px; padding: 2px 8px; border: 1px solid var(--bd); color: var(--st); letter-spacing: 0.5px; font-weight: 700; }
+.chip.ok  { color:var(--g); border-color:var(--g); }
+.chip.err { color:var(--r); border-color:var(--r); }
+.chip.k   { color:var(--y); border-color:var(--y); }
+
+.json { padding: 11px 13px; font-size: 13px; line-height: 1.7; white-space: pre; color: var(--st); }
+.jk { color: var(--c); }
+.js { color: var(--g); }
+.jn { color: var(--y); }
+.jb { color: var(--r); font-weight: 700; }
+
+.dt-context { margin: 11px 13px; padding: 9px 11px; background: var(--sub); border-left: 2px solid var(--y); font-size: 12px; }
+.dt-context.c { border-left-color: var(--c); margin-top: 0; }
+.dt-context .lbl { color: var(--mt); letter-spacing: 1px; font-weight: 700; }
+.dt-context .v { color: var(--t); margin-top: 4px; line-height: 1.6; }
+
+/* ── 智能体面板 ── */
+.agents-list { padding: 9px; }
+.agent { background: var(--sub); border: 1px solid var(--bd); padding: 10px 11px; margin-bottom: 7px; position: relative; }
+.agent.run  { border-left: 3px solid var(--g); }
+.agent.done { border-left: 3px solid var(--y); }
+.agent.wait { border-left: 3px solid var(--mt); }
+.agent .h { display: flex; justify-content: space-between; align-items: baseline; }
+.agent .nm { color: var(--tt); font-weight: 700; font-size: 14px; }
+.agent .nm.r { color: var(--g); }
+.agent .nm.w { color: var(--st); }
+.agent .st { font-size: 12px; font-weight: 700; letter-spacing: 0.8px; }
+.agent .st.r { color: var(--g); }
+.agent .st.d { color: var(--y); }
+.agent .st.w { color: var(--mt); }
+.agent .det { color: var(--st); font-size: 12px; margin-top: 5px; }
+.agent .stats { display: flex; gap: 14px; margin-top: 7px; font-size: 12px; }
+.agent .stats .k { color: var(--mt); }
+.agent .stats .v { color: var(--y); font-weight: 700; }
+
+/* ── 运行记录视图 ── */
+.runs-list { padding: 0; }
+.run-hist-row {
+  display: flex; align-items: center;
+  padding: 10px 14px; gap: 11px;
+  border-bottom: 1px solid var(--div);
+  cursor: pointer; transition: background 0.1s; font-size: 13px;
+}
+.run-hist-row:hover { background: var(--hover); }
+.run-hist-row .rid  { color: var(--y); font-weight: 700; min-width: 148px; }
+.run-hist-row .rtask { flex:1; color:var(--t); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.run-hist-row .rphase { color:var(--g); font-size:12px; min-width:42px; text-align:center; }
+.run-hist-row .rdur   { color:var(--st); font-size:12px; min-width:68px; text-align:right; }
+.run-hist-row .rsta { font-size:11px; padding:2px 8px; border:1px solid; font-weight:700; letter-spacing:0.5px; min-width:58px; text-align:center; }
+.run-hist-row .rsta.comp { color:var(--g); border-color:var(--g); }
+.run-hist-row .rsta.part { color:var(--y); border-color:var(--y); }
+.run-hist-row .rsta.fail { color:var(--r); border-color:var(--r); }
+
+/* ── 信息卡片（报告/元信息视图）── */
+.info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 13px; padding: 16px; }
+.info-card { background: var(--sub); border: 1px solid var(--bd); padding: 15px 17px; box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
+.info-card .ic-title { color: var(--y); font-size: 13px; font-weight: 700; letter-spacing: 1px; margin-bottom: 11px; }
+.ic-kv { display: flex; justify-content: space-between; padding: 5px 0; font-size: 13px; border-bottom: 1px solid var(--div); }
+.ic-kv:last-child { border-bottom: none; }
+.ic-kv .ik { color: var(--st); }
+.ic-kv .iv { color: var(--tt); font-weight: 600; }
+.ic-kv .iv.g { color: var(--g); }
+.ic-kv .iv.r { color: var(--r); }
+.ic-kv .iv.y { color: var(--y); }
+
+/* ── 模式选择弹窗 ── */
+.modal-overlay {
+  display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,0.65); z-index: 50;
+  align-items: center; justify-content: center;
+}
+.modal-overlay.open { display: flex; }
+.modal {
+  background: var(--panel); border: 1px solid var(--bd-strong);
+  padding: 26px; min-width: 340px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.55);
+}
+.modal-title { color: var(--y); font-size: 15px; font-weight: 700; letter-spacing: 1.5px; margin-bottom: 18px; }
+.mode-opts { display: flex; flex-direction: column; gap: 9px; margin-bottom: 18px; }
+.mode-opt {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 11px 15px;
+  background: var(--sub); border: 1px solid var(--bd);
+  cursor: pointer; transition: all 0.12s;
+}
+.mode-opt:hover { border-color: var(--y); background: var(--hover); }
+.mode-opt.active { border-color: var(--y); background: var(--y-bg); }
+.mode-opt .mn { color: var(--tt); font-weight: 700; font-size: 14px; }
+.mode-opt.active .mn { color: var(--y); }
+.mode-opt .md { color: var(--st); font-size: 12px; margin-top: 2px; }
+.mode-opt .mk { font-size: 11px; padding: 2px 7px; border: 1px solid var(--bd); color: var(--mt); }
+.mode-opt.active .mk { border-color: var(--y); color: var(--y); }
+.modal-close {
+  background: var(--sub); border: 1px solid var(--bd);
+  color: var(--st); font-family: inherit; font-size: 12px;
+  padding: 6px 14px; cursor: pointer; letter-spacing: 0.8px; font-weight: 700;
+  transition: all 0.12s; float: right;
+}
+.modal-close:hover { background: var(--hover); color: var(--y); border-color: var(--y); }
+
+/* ── 杂项 ── */
+.empty { padding: 32px 13px; text-align: center; color: var(--mt); font-size: 13px; letter-spacing: 0.8px; }
+
+/* ── 底部功能键栏 ── */
+.fbar {
+  position: fixed; bottom: 0; left: 0; right: 0; height: 26px;
+  background: var(--sub); border-top: 1px solid var(--bd);
+  display: flex; align-items: center;
+  padding: 0 13px; gap: 16px;
+  font-size: 12px; letter-spacing: 0.8px;
+  z-index: 10; overflow: hidden;
+}
+.fbar .it { color: var(--mt); white-space: nowrap; cursor: pointer; transition: color 0.12s; }
+.fbar .it kbd { color: var(--y); background: transparent; padding: 0 2px; font-family: inherit; font-size: 12px; }
+.fbar .it:hover { color: var(--t); }
+.fbar .it.active { color: var(--y); }
+.fbar .spc { flex: 1; }
+.fbar .brand { color: var(--y); }
+</style>
+</head>
+<body>
+
+<!-- ===== 顶部状态栏 ===== -->
+<div class="strip">
+  <div class="strip-l">
+    <span class="brand">⚡ HARNESS</span>
+    <span class="sep">│</span>
+    <span class="meta" id="strip-meta">localhost:7777 · 会话 abc123 · 2026-5-2 01:13:44</span>
+    <span class="live">实时</span>
+  </div>
+  <div class="ticker"><div class="ticker-inner" id="ticker"></div></div>
+  <div class="strip-r">
+    <span class="conn-dot"></span>
+    <span>SSE</span>
+    <span style="color:var(--mt);">│</span>
+    <span id="up">运行 4分39秒</span>
+  </div>
+</div>
+
+<!-- ===== 主布局 ===== -->
+<div class="layout">
+
+  <!-- ===== 侧边栏 ===== -->
+  <aside class="sidebar">
+    <div class="side-section brand">
+      <div class="brand-line"><span class="name">HARNESS</span><span class="ver">v0.2</span></div>
+      <div class="brand-tag">个人 · 智能体终端</div>
+    </div>
+    <div class="side-section">
+      <div class="kv"><span class="k">会话</span><span class="v y">abc123</span></div>
+      <div class="kv"><span class="k">运行</span><span class="v">2026-5-2-004908</span></div>
+      <div class="kv"><span class="k">模式</span><span class="v y" id="side-mode">独立</span></div>
+      <div class="kv"><span class="k">阶段</span><span class="v g">5 / 9</span></div>
+      <div class="kv"><span class="k">运行时长</span><span class="v" id="side-uptime">4分39秒</span></div>
+    </div>
+
+    <nav class="nav" id="nav-menu">
+      <div class="nav-item active" data-view="overview" data-tip="默认总览" onclick="navTo('overview',this)"><span class="fkey">F1</span><span class="label">总览</span><span class="badge y">●</span></div>
+      <div class="nav-item" data-view="skills" data-tip="所有技能状态" onclick="navTo('skills',this)"><span class="fkey">F2</span><span class="label">技能</span><span class="badge">14</span></div>
+      <div class="nav-item" data-view="runs" data-tip="历史运行记录" onclick="navTo('runs',this)"><span class="fkey">F3</span><span class="label">运行记录</span><span class="badge g">1</span></div>
+      <div class="nav-item" data-view="agents" data-tip="多智能体并行" onclick="navTo('agents',this)" id="nav-agents"><span class="fkey">F4</span><span class="label">智能体</span><span class="badge" id="agents-badge">0</span></div>
+      <div class="nav-item" data-view="mode" data-tip="切换运行模式" onclick="navTo('mode',this)"><span class="fkey">F5</span><span class="label">模式</span><span class="badge y" id="nav-mode-badge">独立</span></div>
+      <div class="nav-item" data-view="findings" data-tip="发现的问题" onclick="navTo('findings',this)"><span class="fkey">F6</span><span class="label">发现</span><span class="badge">19</span></div>
+      <div class="nav-item" data-view="proposals" data-tip="待议提案" onclick="navTo('proposals',this)"><span class="fkey">F7</span><span class="label">提案</span><span class="badge c">4</span></div>
+      <div class="nav-item" data-view="feedback" data-tip="待评分运行" onclick="navTo('feedback',this)"><span class="fkey">F8</span><span class="label">反馈</span><span class="badge m">3</span></div>
+      <div class="nav-item" data-view="reporter" data-tip="报告状态" onclick="navTo('reporter',this)"><span class="fkey">F9</span><span class="label">报告</span><span class="badge g">正常</span></div>
+      <div class="nav-item" data-view="meta" data-tip="会话元信息" onclick="navTo('meta',this)"><span class="fkey">F10</span><span class="label">元信息</span><span class="badge">654</span></div>
+    </nav>
+
+    <div class="side-section">
+      <div class="side-title">Token · 会话</div>
+      <div class="meter">
+        <div class="meter-row">
+          <span class="lbl">输入</span>
+          <div class="bar"><span id="bar-in" style="position:absolute;left:0;top:0;bottom:0;width:6.2%;background:linear-gradient(90deg,#8c6d2a,#d4a843);border-radius:3px;"></span></div>
+          <span class="num" id="tok-in">12.4K</span>
+        </div>
+        <div class="meter-row">
+          <span class="lbl">输出</span>
+          <div class="bar"><span id="bar-out" style="position:absolute;left:0;top:0;bottom:0;width:1.5%;background:linear-gradient(90deg,#8c6d2a,#d4a843);border-radius:3px;"></span></div>
+          <span class="num" id="tok-out">3.1K</span>
+        </div>
+        <div class="meter-row">
+          <span class="lbl">上下文</span>
+          <div class="bar"><span id="bar-ctx" style="position:absolute;left:0;top:0;bottom:0;width:64%;background:linear-gradient(90deg,#d4a843,#e0914a);border-radius:3px;"></span></div>
+          <span class="num" id="tok-ctx">64%</span>
+        </div>
+      </div>
+      <div class="kv" style="margin-top:9px;"><span class="k">费用</span><span class="v y" id="side-cost">$0.42</span></div>
+      <div class="kv"><span class="k">工具调用</span><span class="v" id="tool-count">142</span></div>
+      <div class="kv"><span class="k">错误</span><span class="v r" id="side-errors">2</span></div>
+    </div>
+
+    <div class="side-section">
+      <div class="side-title">快捷键</div>
+      <div class="hotkey-row"><span>命令</span><kbd>⌘K</kbd></div>
+      <div class="hotkey-row"><span>筛选</span><kbd>⌘F</kbd></div>
+      <div class="hotkey-row"><span>帮助</span><kbd>⌘/</kbd></div>
+      <div class="hotkey-row"><span>清空</span><kbd>ESC</kbd></div>
+    </div>
+  </aside>
+
+  <!-- ===== 主区容器 ===== -->
+  <div class="main-wrapper">
+
+    <!-- 关键指标栏 -->
+    <div class="metrics-bar">
+      <div class="metric" data-tip="本次会话输入 Token 总量">
+        <span class="m-lbl">输入 Token</span>
+        <span class="m-val c" id="m-in">12.4K</span>
+      </div>
+      <div class="metric" data-tip="本次会话输出 Token 总量">
+        <span class="m-lbl">输出 Token</span>
+        <span class="m-val" id="m-out">3.1K</span>
+      </div>
+      <div class="metric" data-tip="缓存命中率 (cache_read / total_in)">
+        <span class="m-lbl">缓存命中</span>
+        <span class="m-val g" id="m-cache">64%</span>
+        <div class="m-bar"><div class="m-bar-fill" id="m-cache-bar" style="width:64%;background:var(--g);"></div></div>
+      </div>
+      <div class="metric" data-tip="本次会话累计费用">
+        <span class="m-lbl">费用</span>
+        <span class="m-val y" id="m-cost">$0.42</span>
+      </div>
+      <div class="metric" data-tip="工具调用总次数">
+        <span class="m-lbl">工具调用</span>
+        <span class="m-val" id="m-tools">142</span>
+      </div>
+      <div class="metric" data-tip="上下文窗口使用率">
+        <span class="m-lbl">上下文</span>
+        <span class="m-val" id="m-ctx">64%</span>
+        <div class="m-bar"><div class="m-bar-fill" id="m-ctx-bar" style="width:64%;background:var(--a);"></div></div>
+      </div>
+      <div class="metric" data-tip="当前会话错误总数">
+        <span class="m-lbl">错误</span>
+        <span class="m-val r" id="m-errors">2</span>
+      </div>
+      <div class="metric" data-tip="当前运行阶段进度">
+        <span class="m-lbl">运行阶段</span>
+        <span class="m-val y" id="m-phase">5/9</span>
+      </div>
+    </div>
+
+    <!-- 视图切换 -->
+    <div class="view-tabs">
+      <div class="view-tab active" data-vtab="overview" onclick="switchView('overview',this)">总览</div>
+      <div class="view-tab" data-vtab="skills" onclick="switchView('skills',this)">技能</div>
+      <div class="view-tab" data-vtab="timeline" onclick="switchView('detail',this)">时间线</div>
+      <div class="view-tab" data-vtab="intel" onclick="switchView('intel',this)">情报</div>
+    </div>
+
+    <!-- 主内容网格 -->
+    <main class="main" id="main">
+
+      <!-- 技能列表 -->
+      <section class="pane skills-pane">
+        <div class="ph">
+          <span class="ph-title">技能列表</span>
+          <span class="ph-tag live">实时</span>
+          <span class="ph-meta">14 · 4运行 3完成 5空闲 2错误</span>
+        </div>
+        <div class="skill-filters">
+          <button class="sf-btn active" data-sf="all" onclick="skillFilter('all',this)">全部</button>
+          <button class="sf-btn" data-sf="running" onclick="skillFilter('running',this)">运行中</button>
+          <button class="sf-btn" data-sf="done" onclick="skillFilter('done',this)">完成</button>
+          <button class="sf-btn" data-sf="error" onclick="skillFilter('error',this)">错误</button>
+        </div>
+        <div class="pb">
+          <div class="skills-grid" id="skills-grid"></div>
+        </div>
+      </section>
+
+      <!-- 当前运行 -->
+      <section class="pane">
+        <div class="ph">
+          <span class="ph-title">当前运行</span>
+          <span class="ph-tag solo" id="run-mode-tag">独立</span>
+          <span class="ph-meta">预计 ~30s</span>
+        </div>
+        <div class="pb">
+          <div class="run-block">
+            <div class="run-id">2026-5-2-004908</div>
+            <div class="run-task">重新设计 dashboard-mockup.html（柔和配色 · 中文化 · 交互增强）</div>
+            <div class="run-stat">
+              <div class="col"><span class="lbl">阶段</span><span class="val g">5/9</span></div>
+              <div class="col"><span class="lbl">通过</span><span class="val g">4/4</span></div>
+              <div class="col"><span class="lbl">失败</span><span class="val">0</span></div>
+              <div class="col"><span class="lbl">耗时</span><span class="val y">4分39秒</span></div>
+            </div>
+            <div class="phase-bar">
+              <div class="phase-cell done"></div>
+              <div class="phase-cell done"></div>
+              <div class="phase-cell skipped"></div>
+              <div class="phase-cell done"></div>
+              <div class="phase-cell running"></div>
+              <div class="phase-cell"></div>
+              <div class="phase-cell"></div>
+              <div class="phase-cell"></div>
+              <div class="phase-cell"></div>
+            </div>
+          </div>
+          <div class="phase-list">
+            <div class="phase-row done"><span class="num">1</span><span class="ico done">✓</span><span class="nm">a1-task-understander</span><span class="ts">142ms</span></div>
+            <div class="phase-row done"><span class="num">2</span><span class="ico done">✓</span><span class="nm">a2-repo-sensor</span><span class="ts">187ms</span></div>
+            <div class="phase-row skipped"><span class="num">3</span><span class="ico skipped">⊘</span><span class="nm">a3-retriever</span><span class="ts">已跳过</span></div>
+            <div class="phase-row done"><span class="num">4</span><span class="ico done">✓</span><span class="nm">a4-planner</span><span class="ts">14ms</span></div>
+            <div class="phase-row running"><span class="num">5</span><span class="ico running">●</span><span class="nm">a5-executor</span><span class="ts">运行中</span></div>
+            <div class="phase-row pending"><span class="num">6</span><span class="ico pending">○</span><span class="nm">a6-validator</span><span class="ts">—</span></div>
+            <div class="phase-row pending"><span class="num">7</span><span class="ico pending">○</span><span class="nm">a7-explainer</span><span class="ts">—</span></div>
+            <div class="phase-row pending"><span class="num">8</span><span class="ico pending">○</span><span class="nm">a8-risk-guard</span><span class="ts">按需</span></div>
+            <div class="phase-row pending"><span class="num">9</span><span class="ico pending">○</span><span class="nm">finalize</span><span class="ts">—</span></div>
+          </div>
+          <div class="run-actions">
+            <button class="btn primary" id="team-toggle" onclick="toggleTeam()" data-tip="切换独立 / 团队模式">▶ 模拟团队</button>
+            <button class="btn" onclick="alert('将打开 _meta/.helix-current-run.json')" data-tip="查看运行状态 JSON">查看</button>
+            <button class="btn danger" onclick="alert('将中止 a5-executor')" data-tip="中止当前阶段">中止</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 情报中心 -->
+      <section class="pane intel-pane">
+        <div class="ph"><span class="ph-title">情报中心</span></div>
+        <div class="tabs">
+          <div class="tab active" data-tab="findings">发现<span class="cnt">19</span></div>
+          <div class="tab" data-tab="proposals">提案<span class="cnt">4</span></div>
+          <div class="tab" data-tab="feedback">反馈<span class="cnt">3</span></div>
+        </div>
+        <div class="pb"><div class="intel-list" id="intel-list"></div></div>
+      </section>
+
+      <!-- 智能体面板（团队模式）-->
+      <section class="pane agents">
+        <div class="ph">
+          <span class="ph-title">智能体</span>
+          <span class="ph-tag team">团队</span>
+          <span class="ph-meta">3 并行</span>
+        </div>
+        <div class="pb"><div class="agents-list" id="agents-list"></div></div>
+      </section>
+
+      <!-- 时间线 -->
+      <section class="pane timeline">
+        <div class="ph">
+          <span class="ph-title">时间线</span>
+          <span class="ph-tag live">▮ 直播流</span>
+          <span class="ph-meta" id="tl-cnt">17 条事件</span>
+        </div>
+        <div class="tl-toolbar">
+          <span class="tl-stat">事件 <span class="v" id="tl-cnt2">17</span></span>
+          <span style="color:var(--mt);">·</span>
+          <span class="tl-stat">速率 <span class="v">~3/s</span></span>
+          <span style="color:var(--mt);">·</span>
+          <span class="tl-stat">文件 <span class="v">live-events.jsonl</span></span>
+          <span class="filter-pill" id="filter-pill" onclick="clearFilter()">
+            <span>筛选:</span><span id="filter-label">helix</span><span class="x">✕</span>
+          </span>
+          <span style="margin-left:auto;color:var(--mt);font-size:12px;">↑ 最新 · 点击查看详情</span>
+        </div>
+        <div class="pb"><div id="rows"></div></div>
+      </section>
+
+      <!-- 事件详情 -->
+      <section class="pane detail">
+        <div class="ph">
+          <span class="ph-title">事件详情</span>
+          <span class="ph-meta" id="dt-rowinfo">第1行</span>
+        </div>
+        <div class="pb">
+          <div class="dt-meta">
+            <div class="row1">
+              <span class="id" id="dt-id">EVT-001</span>
+              <span class="arg" id="dt-arg">helix ▸ --report a5-executor</span>
+            </div>
+            <div class="row2" id="chips"></div>
+          </div>
+          <pre class="json" id="json"></pre>
+          <div class="dt-context">
+            <div class="lbl">上下文</div>
+            <div class="v" id="ctx">helix run 2026-5-2-004908 · a5-executor · PostToolUse · passes:true</div>
+          </div>
+          <div class="dt-context c">
+            <div class="lbl">原始数据</div>
+            <div class="v">截断至 2KB · _meta/live-events.jsonl 第 <span id="ln">4182</span> 行</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 运行记录视图 -->
+      <section class="pane runs-pane" style="display:none;">
+        <div class="ph"><span class="ph-title">运行记录</span><span class="ph-meta">6 条记录</span></div>
+        <div class="pb"><div class="runs-list" id="runs-list"></div></div>
+      </section>
+
+      <!-- 报告视图 -->
+      <section class="pane reporter-pane" style="display:none;">
+        <div class="ph"><span class="ph-title">报告 · 状态</span></div>
+        <div class="pb">
+          <div class="info-grid">
+            <div class="info-card">
+              <div class="ic-title">最近运行</div>
+              <div class="ic-kv"><span class="ik">运行 ID</span><span class="iv">2026-5-2-004908</span></div>
+              <div class="ic-kv"><span class="ik">状态</span><span class="iv y">进行中</span></div>
+              <div class="ic-kv"><span class="ik">阶段</span><span class="iv g">5/9 (a5-executor)</span></div>
+              <div class="ic-kv"><span class="ik">耗时</span><span class="iv">4分39秒</span></div>
+              <div class="ic-kv"><span class="ik">飞书推送</span><span class="iv r">失败（超时）</span></div>
+            </div>
+            <div class="info-card">
+              <div class="ic-title">下次运行</div>
+              <div class="ic-kv"><span class="ik">触发方式</span><span class="iv">按需执行</span></div>
+              <div class="ic-kv"><span class="ik">自动触发</span><span class="iv">Stop hook</span></div>
+              <div class="ic-kv"><span class="ik">目标文件</span><span class="iv">_meta/progress.md</span></div>
+              <div class="ic-kv"><span class="ik">写入模式</span><span class="iv">追加</span></div>
+            </div>
+            <div class="info-card">
+              <div class="ic-title">飞书配置</div>
+              <div class="ic-kv"><span class="ik">App ID</span><span class="iv">cli_a943f27070f41bef</span></div>
+              <div class="ic-kv"><span class="ik">用户 ID</span><span class="iv">ou_835b575f...</span></div>
+              <div class="ic-kv"><span class="ik">上次推送</span><span class="iv r">超时 5012ms</span></div>
+              <div class="ic-kv"><span class="ik">重试</span><span class="iv y">已延迟</span></div>
+            </div>
+            <div class="info-card">
+              <div class="ic-title">会话统计</div>
+              <div class="ic-kv"><span class="ik">总运行次数</span><span class="iv">6</span></div>
+              <div class="ic-kv"><span class="ik">成功率</span><span class="iv g">83%</span></div>
+              <div class="ic-kv"><span class="ik">平均耗时</span><span class="iv">3分12秒</span></div>
+              <div class="ic-kv"><span class="ik">累计费用</span><span class="iv y">$2.18</span></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 元信息视图 -->
+      <section class="pane meta-pane" style="display:none;">
+        <div class="ph"><span class="ph-title">元信息 · 会话</span></div>
+        <div class="pb">
+          <div class="info-grid">
+            <div class="info-card">
+              <div class="ic-title">Harness 配置</div>
+              <div class="ic-kv"><span class="ik">版本</span><span class="iv y">v0.2</span></div>
+              <div class="ic-kv"><span class="ik">技能数</span><span class="iv">14 个</span></div>
+              <div class="ic-kv"><span class="ik">插件</span><span class="iv">alex-harness 0.3.1</span></div>
+              <div class="ic-kv"><span class="ik">入口</span><span class="iv">/helix（唯一）</span></div>
+              <div class="ic-kv"><span class="ik">模式</span><span class="iv y" id="meta-mode">独立</span></div>
+            </div>
+            <div class="info-card">
+              <div class="ic-title">当前会话</div>
+              <div class="ic-kv"><span class="ik">会话 ID</span><span class="iv">abc123</span></div>
+              <div class="ic-kv"><span class="ik">开始时间</span><span class="iv">2026-5-2 01:13:44</span></div>
+              <div class="ic-kv"><span class="ik">用户</span><span class="iv">Alex</span></div>
+              <div class="ic-kv"><span class="ik">模型</span><span class="iv">claude-opus-4-7</span></div>
+              <div class="ic-kv"><span class="ik">上下文</span><span class="iv y" id="meta-ctx">654/800 chars</span></div>
+            </div>
+            <div class="info-card">
+              <div class="ic-title">记忆</div>
+              <div class="ic-kv"><span class="ik">路径</span><span class="iv">~/.claude/projects/…/memory/</span></div>
+              <div class="ic-kv"><span class="ik">条目数</span><span class="iv">10 条</span></div>
+              <div class="ic-kv"><span class="ik">最近写入</span><span class="iv">session_2026-4-30_state.md</span></div>
+            </div>
+            <div class="info-card">
+              <div class="ic-title">运行环境</div>
+              <div class="ic-kv"><span class="ik">运行时长</span><span class="iv g" id="meta-up">4分39秒</span></div>
+              <div class="ic-kv"><span class="ik">事件/JSONL</span><span class="iv" id="meta-events">4182 行</span></div>
+              <div class="ic-kv"><span class="ik">SSE 连接</span><span class="iv g">已连接</span></div>
+              <div class="ic-kv"><span class="ik">工作目录</span><span class="iv">E:\ai\study\person\Alex-harness</span></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+</div>
+
+<!-- ===== 模式选择弹窗 ===== -->
+<div class="modal-overlay" id="mode-modal">
+  <div class="modal">
+    <div class="modal-title">选择模式</div>
+    <div class="mode-opts">
+      <div class="mode-opt active" onclick="setMode('独立',this)">
+        <div><div class="mn">独立模式</div><div class="md">单智能体 · 顺序执行各阶段</div></div>
+        <span class="mk">当前</span>
+      </div>
+      <div class="mode-opt" onclick="setMode('团队',this)">
+        <div><div class="mn">团队模式</div><div class="md">多智能体并行 · 并发执行</div></div>
+        <span class="mk">S+T</span>
+      </div>
+      <div class="mode-opt" onclick="setMode('审查',this)">
+        <div><div class="mn">审查模式</div><div class="md">代码审查流程 · PR 门控</div></div>
+        <span class="mk">S+R</span>
+      </div>
+    </div>
+    <button class="modal-close" onclick="closeModal()">关闭 ESC</button>
+  </div>
+</div>
+
+<!-- ===== 底部功能键栏 ===== -->
+<div class="fbar">
+  <span class="it active" id="fb-f1" onclick="navToKey(1)"><kbd>F1</kbd> 总览</span>
+  <span class="it" id="fb-f2" onclick="navToKey(2)"><kbd>F2</kbd> 技能</span>
+  <span class="it" id="fb-f3" onclick="navToKey(3)"><kbd>F3</kbd> 记录</span>
+  <span class="it" id="fb-f4" onclick="navToKey(4)"><kbd>F4</kbd> 智能体</span>
+  <span class="it" id="fb-f5" onclick="navToKey(5)"><kbd>F5</kbd> 模式</span>
+  <span class="it" id="fb-f6" onclick="navToKey(6)"><kbd>F6</kbd> 发现</span>
+  <span class="it" id="fb-f7" onclick="navToKey(7)"><kbd>F7</kbd> 提案</span>
+  <span class="it" id="fb-f8" onclick="navToKey(8)"><kbd>F8</kbd> 反馈</span>
+  <span class="it" id="fb-f9" onclick="navToKey(9)"><kbd>F9</kbd> 报告</span>
+  <span class="it" id="fb-f10" onclick="navToKey(10)"><kbd>F10</kbd> 元信息</span>
+  <span class="spc"></span>
+  <span class="it brand">HARNESS · v0.2 · Alex</span>
+</div>
+
+<script>
+/* ======================================================
+   模拟数据
+   ====================================================== */
+const SKILLS = [
+  { id:'helix',                nm:'helix',       state:'running', det:'阶段 a5-executor',          age:'2s' },
+  { id:'a1-task-understander', nm:'a1·task',     state:'done',    det:'142ms · TaskCard ✓',        age:'12s' },
+  { id:'a2-repo-sensor',       nm:'a2·repo',     state:'done',    det:'187ms · 14 个技能',         age:'8s' },
+  { id:'a3-retriever',         nm:'a3·retr',     state:'idle',    det:'已跳过 · scope 明确',       age:'4m' },
+  { id:'a4-planner',           nm:'a4·plan',     state:'done',    det:'14ms · TaskCard ok',        age:'45s' },
+  { id:'a5-executor',          nm:'a5·exec',     state:'running', det:'正在写 dashboard.html',     age:'now' },
+  { id:'a6-validator',         nm:'a6·valid',    state:'idle',    det:'等待中',                    age:'—' },
+  { id:'a7-explainer',         nm:'a7·expl',     state:'idle',    det:'等待中',                    age:'—' },
+  { id:'a8-risk-guard',        nm:'a8·risk',     state:'error',   det:'已中止 user_confirmed',     age:'3m' },
+  { id:'knowledge-curator',    nm:'knowledge',   state:'running', det:'INTAKE → wiki',             age:'7s' },
+  { id:'context-curator',      nm:'context',     state:'done',    det:'654/800 chars',             age:'2m' },
+  { id:'mode-router',          nm:'mode-router', state:'idle',    det:'上次路由: solo',            age:'8m' },
+  { id:'evolution-tracker',    nm:'evolution',   state:'idle',    det:'4 个提案已应用',            age:'2h' },
+  { id:'session-reporter',     nm:'session',     state:'error',   det:'飞书 API 超时',             age:'10m' },
+];
+
+const EVENTS = [
+  { id:1,  ts:'01:13:24', skill:'a5-executor',  tool:'Edit',  arg:'skills/a5-executor/SKILL.md', argKind:'', state:'run',  dur:191, hook:'PostToolUse', err:false, raw:"Edit skills/a5-executor/SKILL.md" },
+  { id:2,  ts:'01:13:17', skill:'a5-executor',  tool:'Edit',  arg:'skills/a5-executor/SKILL.md', argKind:'', state:'run',  dur:45,  hook:'PostToolUse', err:false, raw:"Edit skills/a5-executor/SKILL.md" },
+  { id:3,  ts:'01:13:14', skill:'a5-executor',  tool:'Grep',  arg:'phase',                       argKind:'', state:'done', dur:90,  hook:'PostToolUse', err:false, raw:"Grep phase" },
+  { id:4,  ts:'01:13:07', skill:'a5-executor',  tool:'Write', arg:'mockups/dashboard-mockup.html',argKind:'accent', state:'run', dur:88, hook:'PreToolUse', err:false, raw:"Write mockups/dashboard-mockup.html" },
+  { id:5,  ts:'01:13:03', skill:'a5-executor',  tool:'Bash',  arg:'node skills/a5-executor/run.cjs', argKind:'', state:'run', dur:271, hook:'PostToolUse', err:false, raw:"node skills/a5-executor/run.cjs" },
+  { id:6,  ts:'01:13:00', skill:'a5-executor',  tool:'Glob',  arg:'**/*.cjs',                    argKind:'', state:'done', dur:236, hook:'PostToolUse', err:false, raw:"Glob **/*.cjs" },
+  { id:7,  ts:'01:12:53', skill:'a5-executor',  tool:'Glob',  arg:'**/*.cjs',                    argKind:'', state:'done', dur:250, hook:'PostToolUse', err:false, raw:"Glob **/*.cjs" },
+  { id:8,  ts:'01:12:49', skill:'a5-executor',  tool:'Edit',  arg:'skills/a5-executor/SKILL.md', argKind:'', state:'run',  dur:45,  hook:'PostToolUse', err:false, raw:"Edit skills/a5-executor/SKILL.md" },
+  { id:9,  ts:'01:12:46', skill:'a5-executor',  tool:'Read',  arg:'_meta/progress.md',           argKind:'', state:'done', dur:21,  hook:'PostToolUse', err:false, raw:"Read _meta/progress.md" },
+  { id:10, ts:'01:12:28', skill:'a5-executor',  tool:'Read',  arg:'_meta/progress.md',           argKind:'', state:'done', dur:252, hook:'PostToolUse', err:false, raw:"Read _meta/progress.md" },
+  { id:11, ts:'01:12:18', skill:'a5-executor',  tool:'Edit',  arg:'skills/a5-executor/SKILL.md', argKind:'', state:'run',  dur:16,  hook:'PostToolUse', err:false, raw:"Edit skills/a5-executor/SKILL.md" },
+  { id:12, ts:'00:21:44', skill:'a8-risk-guard', tool:'Bash', arg:'evaluate: rm -rf node_modules',argKind:'', state:'done', dur:8, hook:'PostToolUse', err:true, raw:"node skills/a8-risk-guard/run.cjs" },
+];
+
+const FINDINGS = [
+  { id:'F-019', sev:'high', title:'SKILL.md 与 DIRECTION_RULES 双源事实冲突', meta:'2026-4-30 · context-curator · evolution-tracker' },
+  { id:'F-018', sev:'med',  title:'新方向缺少 PROPOSAL_TEMPLATE 配套文件',  meta:'2026-4-30 · evolution-tracker · phase3_propose' },
+  { id:'F-017', sev:'med',  title:'"..."（省略号）不触发 SIGNAL_KEYWORDS',   meta:'2026-4-30 · skill_feedback · context-curator' },
+  { id:'F-016', sev:'low',  title:'悬空任务 2.4 → 2.3 · 过时引用',          meta:'2026-4-30 · task_plan.md 清理' },
+  { id:'F-012', sev:'med',  title:'旧快照中 frontmatter task_ids 缺失',      meta:'2026-4-30 · context-curator phase3' },
+];
+const PROPOSALS = [
+  { id:'P-2026-4-30-001', sta:'app', title:'跨会话模式挖掘 · progress.md 作为第三条证据流', meta:'已应用 · phase1 + phase3' },
+  { id:'P-2026-4-30-002', sta:'app', title:'fix_notes ≥30 字符质量门（skill_feedback CLI）', meta:'已应用 · 3 案例测试通过' },
+  { id:'P-2026-4-30-003', sta:'app', title:'Level 5.5 微压缩插在 5 和 6 之间',               meta:'已应用 · run.cjs +60chars 上限' },
+  { id:'P-2026-4-30-004', sta:'app', title:'Phase 4.5 VERIFY · 响应解析 + 分块完整性',       meta:'已应用 · F-008 + F-010 + F-011' },
+];
+const FEEDBACK = [
+  { id:'2026-5-2-004908',  title:'helix 运行 · 界面重新设计 v0.2', meta:'未评分 · 等待用户评分' },
+  { id:'2026-4-30-235444', title:'context-curator · 800/800 上限',  meta:'未评分 · 1 天待处理' },
+  { id:'2026-4-30-235342', title:'context-curator · diff 假阳性',   meta:'未评分 · 1 天待处理' },
+];
+const AGENTS = [
+  { id:'sub-1', label:'frontend-design', state:'run',  model:'opus-4-7',   dur:'8s', tokens:'2.4K', task:'设计 Bloomberg 布局网格 + 色彩 token' },
+  { id:'sub-2', label:'ui-ux-pro-max',   state:'done', model:'sonnet-4-6', dur:'4s', tokens:'1.1K', task:'选取暖灰配色方案：琥珀 + 绿/红分歧色' },
+  { id:'sub-3', label:'code-reviewer',   state:'wait', model:'haiku-4-5',  dur:'—',  tokens:'—',    task:'审查 HTML 无障碍 + 性能 · 排队中' },
+];
+const RUNS_HISTORY = [
+  { id:'2026-5-2-004908',  task:'重新设计 dashboard-mockup.html v0.2', phase:'5/9', dur:'4分39秒', sta:'part' },
+  { id:'2026-5-1-221533',  task:'修复 session-reporter 飞书洪水问题',   phase:'9/9', dur:'2分11秒', sta:'comp' },
+  { id:'2026-5-1-183002',  task:'发布 v0.3.1',                          phase:'9/9', dur:'1分48秒', sta:'comp' },
+  { id:'2026-4-30-235444', task:'context-curator 800/800 上限运行',      phase:'7/9', dur:'5分02秒', sta:'comp' },
+  { id:'2026-4-30-181234', task:'helix 入口 + Ralph 契约',               phase:'9/9', dur:'8分31秒', sta:'comp' },
+  { id:'2026-4-30-120011', task:'技能修复：移动到顶层 skills/',           phase:'9/9', dur:'3分15秒', sta:'comp' },
+];
+
+/* ======================================================
+   状态
+   ====================================================== */
+let activeFilter = null;
+let selectedId   = 1;
+let activeTab    = 'findings';
+let teamMode     = false;
+let skillFilter_ = 'all';
+let toolCount    = 142;
+let tokenIn      = 12.4;
+let tokenOut     = 3.1;
+let cost         = 0.42;
+let startTime    = Date.now() - (4 * 60 + 39) * 1000;
+
+/* ======================================================
+   导航
+   ====================================================== */
+function navTo(view, el) {
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  if (el) el.classList.add('active');
+  const keys = ['overview','skills','runs','agents','mode','findings','proposals','feedback','reporter','meta'];
+  const idx = keys.indexOf(view) + 1;
+  document.querySelectorAll('.fbar .it').forEach(n => n.classList.remove('active'));
+  const fb = document.getElementById('fb-f' + idx);
+  if (fb) fb.classList.add('active');
+
+  const main = document.getElementById('main');
+  if (view === 'mode') { openModal(); return; }
+
+  if (view === 'overview') {
+    main.className = 'main' + (teamMode ? ' team-mode' : '');
+    document.querySelectorAll('.pane').forEach(p => {
+      const hidden = p.classList.contains('runs-pane') || p.classList.contains('reporter-pane') || p.classList.contains('meta-pane');
+      const agentsPane = p.classList.contains('agents');
+      if (hidden) p.style.display = 'none';
+      else if (agentsPane) p.style.display = teamMode ? '' : 'none';
+      else p.style.display = '';
+    });
+    switchViewTab('overview');
+  } else if (view === 'skills') {
+    main.className = 'main view-skills';
+    showOnly('skills-pane'); switchViewTab('skills');
+  } else if (view === 'runs') {
+    main.className = 'main view-runs';
+    showOnly('runs-pane'); renderRuns(); switchViewTab('');
+  } else if (view === 'agents') {
+    toggleTeam(true);
+  } else if (view === 'findings') {
+    main.className = 'main view-intel'; showOnly('intel-pane'); setTab('findings'); switchViewTab('intel');
+  } else if (view === 'proposals') {
+    main.className = 'main view-intel'; showOnly('intel-pane'); setTab('proposals'); switchViewTab('intel');
+  } else if (view === 'feedback') {
+    main.className = 'main view-intel'; showOnly('intel-pane'); setTab('feedback'); switchViewTab('intel');
+  } else if (view === 'reporter') {
+    main.className = 'main view-reporter'; showOnly('reporter-pane'); switchViewTab('');
+  } else if (view === 'meta') {
+    main.className = 'main view-meta'; showOnly('meta-pane'); switchViewTab('');
+  }
+}
+
+function showOnly(cls) {
+  document.querySelectorAll('.pane').forEach(p => {
+    p.style.display = p.classList.contains(cls) ? '' : 'none';
+  });
+}
+function navToKey(n) {
+  const keys = ['overview','skills','runs','agents','mode','findings','proposals','feedback','reporter','meta'];
+  const view = keys[n - 1];
+  navTo(view, document.querySelector(`.nav-item[data-view="${view}"]`));
+}
+function switchView(view, el) {
+  document.querySelectorAll('.view-tab').forEach(t => t.classList.remove('active'));
+  if (el) el.classList.add('active');
+  const main = document.getElementById('main');
+  if (view === 'overview') { navToKey(1); return; }
+  if (view === 'skills')   { navToKey(2); return; }
+  if (view === 'detail') {
+    main.className = 'main view-detail';
+    document.querySelectorAll('.pane').forEach(p => {
+      p.style.display = (p.classList.contains('timeline') || p.classList.contains('detail')) ? '' : 'none';
+    });
+  }
+  if (view === 'intel') { navToKey(6); }
+}
+function switchViewTab(vtab) {
+  document.querySelectorAll('.view-tab').forEach(t => {
+    t.classList.toggle('active', t.dataset.vtab === vtab);
+  });
+}
+
+/* ======================================================
+   技能筛选
+   ====================================================== */
+function skillFilter(state, el) {
+  skillFilter_ = state;
+  document.querySelectorAll('.sf-btn').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  renderSkills();
+}
+
+/* ======================================================
+   渲染：技能
+   ====================================================== */
+function renderSkills() {
+  const root = document.getElementById('skills-grid');
+  root.innerHTML = '';
+  const ico = { running:'●', done:'✓', idle:'○', error:'✗' };
+  for (const sk of SKILLS) {
+    const hide = skillFilter_ !== 'all' && sk.state !== skillFilter_;
+    const el = document.createElement('div');
+    el.className = 'skill' + (activeFilter === sk.id ? ' filtered' : '') + (hide ? ' hidden' : '');
+    el.dataset.skill = sk.id; el.dataset.state = sk.state;
+    el.setAttribute('data-tip', sk.det);
+    el.innerHTML = `
+      <span class="ico">${ico[sk.state]}</span>
+      <div class="body"><div class="nm">${sk.nm}</div><div class="det">${sk.det}</div></div>
+      <span class="age">${sk.age}</span>`;
+    el.onclick = () => toggleFilter(sk.id);
+    root.appendChild(el);
+  }
+}
+
+/* ======================================================
+   渲染：时间线
+   ====================================================== */
+function renderRows() {
+  const root = document.getElementById('rows');
+  root.innerHTML = '';
+  const list = activeFilter ? EVENTS.filter(e => e.skill === activeFilter) : EVENTS;
+  document.getElementById('tl-cnt').textContent = `${list.length} 条事件${activeFilter ? ' · 筛选: ' + activeFilter : ''}`;
+  document.getElementById('tl-cnt2').textContent = list.length;
+  for (const ev of list) {
+    const el = document.createElement('div');
+    el.className = 'tl-row' + (ev.err ? ' is-error' : '') + (ev.id === selectedId ? ' selected' : '');
+    const ic = ev.err ? `<span class="ic err">✗</span>` :
+               ev.state === 'run' ? `<span class="ic run">●</span>` :
+               `<span class="ic done">✓</span>`;
+    el.innerHTML = `
+      ${ic}
+      <span class="ts">${ev.ts}</span>
+      <div class="body">
+        <span class="skill-nm">${ev.skill}</span>
+        <span class="arrow">▸</span>
+        <span class="arg ${ev.argKind === 'accent' ? 'accent' : ''} ${ev.err ? 'is-error' : ''}">${ev.arg}</span>
+      </div>
+      <span class="dur">${ev.dur}ms</span>
+      <span class="tool">${ev.tool}</span>`;
+    el.onclick = () => selectRow(ev.id);
+    root.appendChild(el);
+  }
+}
+
+/* ======================================================
+   渲染：情报
+   ====================================================== */
+function setTab(tab) {
+  activeTab = tab;
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+  renderIntel();
+}
+function renderIntel() {
+  const root = document.getElementById('intel-list');
+  root.innerHTML = '';
+  const src = activeTab === 'findings' ? FINDINGS : activeTab === 'proposals' ? PROPOSALS : FEEDBACK;
+  if (!src.length) { root.innerHTML = '<div class="empty">— 暂无数据 —</div>'; return; }
+  for (const it of src) {
+    root.appendChild(activeTab === 'findings' ? mkFinding(it) : activeTab === 'proposals' ? mkProposal(it) : mkFeedback(it));
+  }
+}
+function mkFinding(f) {
+  const el = document.createElement('div'); el.className = 'intel-row';
+  const cls = f.sev === 'high' ? 'high' : f.sev === 'med' ? 'med' : 'low';
+  const lbl = f.sev === 'high' ? '高' : f.sev === 'med' ? '中' : '低';
+  el.innerHTML = `<div class="h"><span class="id">${f.id}</span><span class="tag ${cls}">${lbl}</span></div><div class="summ">${f.title}</div><div class="meta">${f.meta}</div>`;
+  return el;
+}
+function mkProposal(p) {
+  const el = document.createElement('div'); el.className = 'intel-row';
+  const cls = p.sta === 'app' ? 'app' : p.sta === 'pen' ? 'pen' : 'rej';
+  const lbl = p.sta === 'app' ? '已应用' : p.sta === 'pen' ? '待定' : '已拒绝';
+  el.innerHTML = `<div class="h"><span class="id">${p.id}</span><span class="tag ${cls}">${lbl}</span></div><div class="summ">${p.title}</div><div class="meta">${p.meta}</div>`;
+  return el;
+}
+function mkFeedback(f) {
+  const el = document.createElement('div'); el.className = 'intel-row';
+  el.innerHTML = `<div class="h"><span class="id">${f.id}</span><span class="tag pen">评分</span></div><div class="summ">${f.title}</div><div class="meta">${f.meta}</div>`;
+  return el;
+}
+
+/* ======================================================
+   渲染：智能体
+   ====================================================== */
+function renderAgents() {
+  const root = document.getElementById('agents-list');
+  root.innerHTML = '';
+  for (const a of AGENTS) {
+    const el = document.createElement('div');
+    el.className = `agent ${a.state}`;
+    const sc = a.state === 'run' ? 'r' : a.state === 'done' ? 'd' : 'w';
+    const st = a.state === 'run' ? '● 运行中' : a.state === 'done' ? '✓ 完成' : '○ 等待';
+    el.innerHTML = `
+      <div class="h"><span class="nm ${sc}">${a.label}</span><span class="st ${sc}">${st}</span></div>
+      <div class="det">${a.task}</div>
+      <div class="stats">
+        <span><span class="k">模型</span> <span class="v">${a.model}</span></span>
+        <span><span class="k">耗时</span> <span class="v">${a.dur}</span></span>
+        <span><span class="k">Token</span> <span class="v">${a.tokens}</span></span>
+      </div>`;
+    root.appendChild(el);
+  }
+}
+
+/* ======================================================
+   渲染：运行记录
+   ====================================================== */
+function renderRuns() {
+  const root = document.getElementById('runs-list');
+  root.innerHTML = '';
+  for (const r of RUNS_HISTORY) {
+    const el = document.createElement('div'); el.className = 'run-hist-row';
+    const staCls = r.sta === 'comp' ? 'comp' : r.sta === 'part' ? 'part' : 'fail';
+    const staLbl = r.sta === 'comp' ? '完成' : r.sta === 'part' ? '进行中' : '失败';
+    el.innerHTML = `
+      <span class="rid">${r.id}</span>
+      <span class="rtask">${r.task}</span>
+      <span class="rphase">${r.phase}</span>
+      <span class="rdur">${r.dur}</span>
+      <span class="rsta ${staCls}">${staLbl}</span>`;
+    el.onclick = () => alert(`查看运行详情: ${r.id}`);
+    root.appendChild(el);
+  }
+}
+
+/* ======================================================
+   事件详情
+   ====================================================== */
+function selectRow(id) { selectedId = id; renderRows(); renderDetail(); }
+function renderDetail() {
+  const ev = EVENTS.find(e => e.id === selectedId);
+  if (!ev) return;
+  document.getElementById('dt-rowinfo').textContent = `第 ${ev.id} 行 · ${ev.skill}`;
+  document.getElementById('dt-id').textContent = `EVT-${String(ev.id).padStart(3,'0')}`;
+  document.getElementById('dt-arg').textContent = `${ev.skill} ▸ ${ev.arg}`;
+  const hookCn = { PreToolUse:'工具前', PostToolUse:'工具后', Stop:'停止钩' };
+  document.getElementById('chips').innerHTML = `
+    <span class="chip ${ev.err ? 'err' : 'ok'}">${ev.err ? '错误' : '成功'}</span>
+    <span class="chip">${ev.dur}ms</span>
+    <span class="chip k">opus-4-7</span>
+    <span class="chip">${hookCn[ev.hook] || ev.hook}</span>
+    <span class="chip">父级 helix</span>`;
+  const obj = {
+    ts: `2026-5-2 ${ev.ts}`, session_id: 'abc123',
+    helix_run_id: '2026-5-2-004908', skill: ev.skill,
+    hook_event: ev.hook, tool_name: ev.tool,
+    tool_input: { command: ev.raw },
+    tool_output_size: 384, duration_ms: ev.dur,
+    model: 'claude-opus-4-7', is_error: ev.err,
+    tokens_in: ev.err ? 0 : 240, tokens_out: ev.err ? 0 : 88,
+  };
+  document.getElementById('json').innerHTML = colorJson(obj, 0);
+  document.getElementById('ln').textContent = 4182 - ev.id;
+  document.getElementById('ctx').textContent = `helix run 2026-5-2-004908 · ${ev.skill} · ${ev.hook} · ${ev.err ? '错误 — Ralph 契约违反' : 'passes:true'}`;
+}
+
+function colorJson(v, indent) {
+  const pad = '  '.repeat(indent);
+  if (v === null)           return '<span class="jb">null</span>';
+  if (typeof v === 'boolean') return `<span class="jb">${v}</span>`;
+  if (typeof v === 'number')  return `<span class="jn">${v}</span>`;
+  if (typeof v === 'string')  return `<span class="js">"${escHtml(v)}"</span>`;
+  if (Array.isArray(v))     return `[\n${v.map(x => `${pad}  ${colorJson(x,indent+1)}`).join(',\n')}\n${pad}]`;
+  const keys = Object.keys(v);
+  if (!keys.length) return '{}';
+  return `{\n${keys.map(k => `${pad}  <span class="jk">"${k}"</span>: ${colorJson(v[k],indent+1)}`).join(',\n')}\n${pad}}`;
+}
+function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+/* ======================================================
+   交互
+   ====================================================== */
+function toggleFilter(skill) {
+  activeFilter = (activeFilter === skill) ? null : skill;
+  const pill = document.getElementById('filter-pill');
+  if (activeFilter) { pill.classList.add('active'); document.getElementById('filter-label').textContent = activeFilter; }
+  else pill.classList.remove('active');
+  renderSkills(); renderRows();
+}
+function clearFilter() {
+  activeFilter = null;
+  document.getElementById('filter-pill').classList.remove('active');
+  renderSkills(); renderRows();
+}
+
+function toggleTeam(forceOn) {
+  teamMode = forceOn === true ? true : !teamMode;
+  const main = document.getElementById('main');
+  const btn  = document.getElementById('team-toggle');
+  if (teamMode) {
+    main.classList.add('team-mode');
+    document.querySelectorAll('.pane.agents').forEach(p => p.style.display = '');
+    btn.textContent = '■ 停止团队'; btn.classList.add('active');
+    document.getElementById('side-mode').textContent = '团队'; document.getElementById('side-mode').style.color = 'var(--m)';
+    document.getElementById('nav-mode-badge').textContent = '团队'; document.getElementById('nav-mode-badge').style.color = 'var(--m)';
+    const rt = document.getElementById('run-mode-tag');
+    rt.className = 'ph-tag team'; rt.textContent = '团队';
+    document.getElementById('agents-badge').textContent = '3'; document.getElementById('agents-badge').classList.add('m');
+    document.getElementById('meta-mode').textContent = '团队';
+    renderAgents();
+  } else {
+    main.classList.remove('team-mode');
+    document.querySelectorAll('.pane.agents').forEach(p => p.style.display = 'none');
+    btn.textContent = '▶ 模拟团队'; btn.classList.remove('active');
+    document.getElementById('side-mode').textContent = '独立'; document.getElementById('side-mode').style.color = '';
+    document.getElementById('nav-mode-badge').textContent = '独立'; document.getElementById('nav-mode-badge').style.color = '';
+    const rt = document.getElementById('run-mode-tag');
+    rt.className = 'ph-tag solo'; rt.textContent = '独立';
+    document.getElementById('agents-badge').textContent = '0'; document.getElementById('agents-badge').classList.remove('m');
+    document.getElementById('meta-mode').textContent = '独立';
+  }
+}
+
+/* ======================================================
+   模式弹窗
+   ====================================================== */
+function openModal()  { document.getElementById('mode-modal').classList.add('open'); }
+function closeModal() {
+  document.getElementById('mode-modal').classList.remove('open');
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.querySelector('.nav-item[data-view="overview"]').classList.add('active');
+}
+function setMode(mode, el) {
+  document.querySelectorAll('.mode-opt').forEach(o => {
+    o.classList.toggle('active', o === el);
+    o.querySelector('.mk').textContent = o === el ? '当前' : '';
+  });
+  document.getElementById('side-mode').textContent = mode;
+  document.getElementById('nav-mode-badge').textContent = mode;
+  document.getElementById('meta-mode').textContent = mode;
+  if (mode === '团队' && !teamMode) toggleTeam(true);
+  setTimeout(closeModal, 600);
+}
+document.getElementById('mode-modal').addEventListener('click', e => { if (e.target === e.currentTarget) closeModal(); });
+
+/* ======================================================
+   Tabs
+   ====================================================== */
+document.querySelectorAll('.tab').forEach(t => t.onclick = () => setTab(t.dataset.tab));
+
+/* ======================================================
+   SSE 模拟 + 指标更新
+   ====================================================== */
+let nextId = EVENTS.length + 1;
+const RUN_IDS = ['helix','a5-executor','knowledge-curator'];
+const TOOLS   = ['Bash','Read','Write','Edit','Glob','Grep'];
+
+function tickSSE() {
+  const sk   = RUN_IDS[Math.floor(Math.random() * RUN_IDS.length)];
+  const tool = TOOLS[Math.floor(Math.random() * TOOLS.length)];
+  const now  = new Date();
+  const pad  = n => String(n).padStart(2,'0');
+  const argMap = { Bash:`node skills/${sk}/run.cjs`, Read:'_meta/progress.md', Write:'mockups/dashboard-mockup.html', Edit:`skills/${sk}/SKILL.md`, Glob:'**/*.cjs', Grep:'phase' };
+  const dur  = 8 + Math.floor(Math.random() * 280);
+  EVENTS.unshift({ id:nextId++, ts:`${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`, skill:sk, tool, arg:argMap[tool], argKind:'', state:'run', dur, hook:'PostToolUse', err:false, raw:`${tool} ${argMap[tool]}` });
+  if (EVENTS.length > 80) EVENTS.length = 80;
+  renderRows();
+
+  toolCount++;
+  tokenIn  = +(tokenIn  + 0.06 + Math.random() * 0.08).toFixed(1);
+  tokenOut = +(tokenOut + 0.01 + Math.random() * 0.02).toFixed(2);
+  cost     = +(cost     + 0.003 + Math.random() * 0.002).toFixed(3);
+  const ctxPct = Math.min(99, Math.floor(64 + Math.random() * 3));
+
+  document.getElementById('tool-count').textContent = toolCount;
+  document.getElementById('tok-in').textContent     = tokenIn.toFixed(1) + 'K';
+  document.getElementById('tok-out').textContent    = tokenOut.toFixed(1) + 'K';
+  document.getElementById('side-cost').textContent  = '$' + cost.toFixed(2);
+  document.getElementById('m-in').textContent       = tokenIn.toFixed(1) + 'K';
+  document.getElementById('m-out').textContent      = tokenOut.toFixed(1) + 'K';
+  document.getElementById('m-tools').textContent    = toolCount;
+  document.getElementById('m-cost').textContent     = '$' + cost.toFixed(2);
+  document.getElementById('m-ctx').textContent      = ctxPct + '%';
+  document.getElementById('m-ctx-bar').style.width  = ctxPct + '%';
+  document.getElementById('tok-ctx').textContent    = ctxPct + '%';
+  document.getElementById('bar-ctx').style.width    = ctxPct + '%';
+  document.getElementById('meta-events').textContent = (4182 + nextId) + ' 行';
+}
+
+function buildTicker() {
+  const items = [
+    { k:'Token', v:'12.4K', cls:'v' }, { k:'工具调用', v:'142 (+3)', cls:'up' },
+    { k:'错误',   v:'2',    cls:'dn' }, { k:'费用',  v:'$0.42',   cls:'v' },
+    { k:'运行时长', v:'4分39秒', cls:'v' }, { k:'最新', v:'a5-executor Write (88ms)', cls:'v' },
+    { k:'上下文',  v:'64%',    cls:'v' }, { k:'JSONL', v:'4182 行', cls:'v' },
+    { k:'运行',    v:'2026-5-2-004908 · 5/9', cls:'up' }, { k:'提案', v:'4 已应用', cls:'up' },
+    { k:'反馈',    v:'3 待评分', cls:'v' }, { k:'模式',  v:'独立',   cls:'v' },
+  ];
+  const html = items.map(i => `<span><span class="k">${i.k}</span> <span class="${i.cls}">${i.v}</span></span>`).join('');
+  document.getElementById('ticker').innerHTML = html + html;
+}
+
+function tickClock() {
+  const now = new Date();
+  const pad = n => String(n).padStart(2,'0');
+  const stamp = `2026-5-2 ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+  document.getElementById('strip-meta').textContent = `localhost:7777 · 会话 abc123 · ${stamp}`;
+  const elapsed = Math.floor((Date.now() - startTime) / 1000);
+  const m = Math.floor(elapsed / 60), s = elapsed % 60;
+  const upStr = m > 0 ? `${m}分${s}秒` : `${s}秒`;
+  document.getElementById('up').textContent          = '运行 ' + upStr;
+  document.getElementById('side-uptime').textContent = upStr;
+  document.getElementById('meta-up').textContent     = upStr;
+}
+
+/* ======================================================
+   键盘快捷键
+   ====================================================== */
+window.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  if (e.key >= 'F1' && e.key <= 'F9') { e.preventDefault(); navToKey(parseInt(e.key.slice(1))); }
+  if (e.key === 'F10') { e.preventDefault(); navToKey(10); }
+  if (e.key === 'Escape') closeModal();
+});
+
+/* ======================================================
+   启动
+   ====================================================== */
+renderSkills();
+renderRows();
+renderDetail();
+renderIntel();
+buildTicker();
+tickClock();
+setInterval(tickClock, 1000);
+setInterval(tickSSE, 3500);
+</script>
+</body>
+</html>

@@ -4,8 +4,12 @@ skills/*/tmp/
 
 # Helix runtime state
 _meta/.helix-current-run.json
+_meta/live-events.jsonl
 _tmp_repo_ctx.json
 _tmp_sr_record.json
+
+# Playwright MCP runtime
+.playwright-mcp/
 
 # Node
 node_modules/

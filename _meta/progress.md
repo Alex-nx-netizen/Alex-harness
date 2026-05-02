@@ -4,9 +4,171 @@
 
 ---
 
+## 2026-5-2
+
+### 会话 23：dashboard v0.3 三处反馈修复（F1-F4 跨视图跳转 / phase 标签 / 宽屏黑空白）
+
+- 🧠 **触发**：Alex 截图反馈三件事
+  - 1) 在 history/evolution 视图点 F1-F4 子 tab 没反应
+  - 2) "phase 5/6" 含义不明
+  - 3) 1920+ 屏幕右下还有大块黑空白（task summary 内容稀疏）
+- 🛠 **改动**：
+  - **F1-F4 跨视图跳转**：`navTab` onclick 和键盘 handler 都改成"非 live 视图自动跳 /live + 切到对应 subtab"；F-key 全局监听不再限制 route
+  - **HELIX 进度 metric 重做**：label 改 `HELIX 进度`，sub `phases · done/running`，title hover 显示完整说明（如 "helix run 2026-5-2-181813 已完成 5/6 个 phase"）；所有 metric 卡 hover 都有 title
+  - **task summary 加事件预览**：renderHistory 拉 `/api/tasks/:id` 拿 events，在 intel sidebar 任务摘要的"打开任务详情"按钮下方加最近 40 条事件 compact timeline，填满右栏黑空白
+  - 同步：选择 session 行时也拉新 task detail；点 task 行时也拉 detail
+- 📊 **agent-teams-playbook 决策树定位**：复杂度=中等（3 个 issue），场景=场景 1（提示增强单 agent），不组团；skill 回退链：本地无完美匹配，general-purpose 自己改
+- ✅ **playwright 验收**：
+  - history 1920 截图：右栏从顶到底填满，最近事件 40/52 滚动
+  - F2 跨视图跳转：/evolution 点 F2 → /live 切到技能 → 14 个 skill 全展开
+  - HELIX 进度卡：5/6 + sub `phases · done`
+
+---
+
+### 会话 22：helix 流程升级 — 加 Step 5.5 skill 最优复用（agent-teams-playbook 嫁接）
+
+- 🧠 **触发**：Alex 触发 /agent-teams-playbook + 给约束"每次任务选择最优 skills 使用，这入口 helix 进入的时候，注意一下"
+- 📐 **理解**：helix v0.2 phase 链跳过了"已有 skill 库"扫描，每次任务从零写。借鉴 agent-teams-playbook 阶段 1 的"Skill 完整回退链"嫁接进 helix
+- 🛠 **改动**：
+  - `skills/helix/SKILL.md` §2 phase 表加 Step 5.5 行（介于 a3-retriever 5 和 a4-planner 6 之间）
+  - 新增 §2.5 段：3 步 skill 发现链（本地扫 14 项 → system-reminder available skills → find-skills MCP）
+  - 命中规则：强匹配 skill 写入 task_card.preferred_skills；零命中要在 progress 留笔（沉淀"已有库不覆盖此类任务"信号）
+  - §6 Ralph 接受清单 + 1 条："skill 最优复用"
+  - 同步到 `C:/Users/Administrator/.claude/plugins/cache/alex-harness/alex-harness/0.3.1/skills/helix/SKILL.md`（Alex 调 /helix 走的实际路径）
+- 🐛 **F-024 物质化**：findings.md 新增——"helix 流程缺 skill 最优复用门槛，每次从零写，复用率为 0"，沉淀这次 retro
+- ⏭ **下次 /helix 验证**：跑下个任务时观察是否真的 a3 → 5.5 → a4，是否 preferred_skills 出现在 plan 里
+- 📊 **agent-teams-playbook 决策树定位**：本次任务复杂度=简单（改 SKILL.md + 沉淀），场景=场景 1（提示增强，单 agent），不组团
+
+---
+
+### 会话 21：高端优雅配色（chartreuse → 香槟金 + 暖墨石）
+
+- 🧠 **触发**：Alex"背景色换一下不太好看，我要高端优雅的"
+- 🎨 **变更**：
+  - 强调 #a3e635 lime → #c9a96e champagne gold
+  - 背景从冷蓝调 #0b0d10 → 暖墨石 #0d0d0f（带微弱褐调）
+  - 文字温白 #ece8df 替代冷白 #e8ebf0
+  - 状态色全 muted：sage green #88c990 / mustard #d4a843 / terracotta #c97870 / slate blue #8b9bbf
+  - HARNESS 标题 Cormorant 衬线 italic + 圆形渐变金 logo
+  - metric 卡顶部金色 hairline（替代粗色条）+ hover 渐显
+  - nav section title 加金色短下划线（万宝龙菜单感）
+  - "打开任务详情"按钮金色渐变 + inset 高光
+  - mono 字体改 IBM Plex Mono（带衬线感等宽，更"老钱"）
+- 📊 **产出**：styles.css 4 处 token 块替换 + 字体栈升级；4 视图截图（live/history/elegant 系列）
+
+---
+
+### 会话 20：dashboard v0.2 → v0.3 IA 大重做（Alex 5 点反馈触发）
+
+- 🧠 **触发**：Alex 看 v0.2 截图给 5 点反馈 ——
+  - 1) 右侧黑空白没填满（grid 比例不对）
+  - 2) 偏好左右布局；agent 处理逻辑 / 当前哪个 skill 在跑 / 项目所有 skills 都看不到
+  - 3) 历史视图信息一锅炖，不好找
+  - 4) 整体堆一块，应细分
+  - 5) 给参考图（HARNESS v0.3 mockup），让借鉴布局；技能列表换为"helix 中用了哪些 skills"；去掉 token/费用；用 ui-ux-pro-max 优化
+- 🛠 **段 1 完成（数据层）**：
+  - ROOT 解析改为 env-var 驱动多候选（`HARNESS_PROJECT_ROOT` → `CLAUDE_PROJECT_DIR` → `cwd` → `__dirname/..`），不再硬编码本机路径
+  - 新增 `getProjectSkillNamesSet()`（30s 缓存）+ `isProjectSkill()`，processEvent 用其过滤 `skills_used`，避免外部 skill 路径误命中（如 `~/.claude/skills/ui-ux-pro-max/`）
+  - 新增 `listAllSkills()` + `getSkillsWithState()`：扫 `ROOT/skills` + `ROOT/.claude/skills` + `CLAUDE_PLUGIN_ROOT/skills`，state 推导（running/done/error/idle）
+  - 新增 `computeMetrics()`：6 个有意义 metric（current_skill / mode / helix_phase / tasks_count / errors / duration_ms），明确去掉 token/cost
+  - 新增 endpoint：`/api/skills` `/api/intel`
+- 🛠 **段 2 完成（前端 IA 大重做）**：
+  - 新调色板（来自 ui-ux-pro-max 规则手工应用 + Image #4 mockup）：黄绿 chartreuse `#a3e635` 替代紫；4 级 bg / 3 级 border / 4 级 text / 6 状态色 / 2 mode 色
+  - 字体阶梯 5-7 级（10/11/12/13/14/16/22/28），8pt spacing rhythm，3 级圆角
+  - **三栏 grid**：左 nav 280 / 中工作区 1fr / 右情报 360
+  - **左 nav**：会话信息 KV / 导航 F1-F4 / 视图 L H E / 快捷键
+  - **中工作区**：6 张顶 metric 卡（72px 高，22px 数字 + 10px label）+ 4 子 tab（总览/技能/时间线/情报）+ 主区动态分段
+  - **总览**：上半 skills 全景 14 项（带 ✓/●/✗/○ 状态点 + 全部/运行/完成/错误/空闲过滤 chip）+ 当前运行（mode badge + 已用 skills 清单）；下半时间线
+  - **右情报中心**：发现/进度 双子 tab，listing intel cards
+  - **历史视图重做**：3 栏（会话列表 320 / 任务列表 1fr / 任务摘要 360）；任务列表按 mode 分组 (TEAM/INDEPENDENT/UNKNOWN)
+  - **升级视图**：保留三段但收紧；TASK PLAN + 进展时间线 + 教训面板
+- 🐛 **F-023 物质化**：`progress.md` 是 CRLF 行尾，`split("\n")` 后每行残留 `\r`；JS 正则 `(.+)$` 因 `.` 不匹配 `\r` + `$` 不在 `\r` 前匹配 → 全部 markdown header 解析失败，progress 永远返回 0 条
+  - 修复：所有 `.split("\n")` 改 `.split(/\r?\n/)`
+  - 影响：所有读 markdown 文件的 helper（findings / progress 都修了；其他没读 md 的不受影响）
+- 📊 **产出**：
+  - server.js 656 → 905 行（新增 skills/metric/intel endpoints + project skill filter）
+  - app.js 894 → 920 行（重写 4 个视图）
+  - styles.css 512 → 690 行（全套 token + 三栏 + 多 panel + responsive）
+  - hook 不变（115 行）
+- ✅ **Alex 反馈兑现**：
+  - 黑空白 ✅（三栏填满）
+  - 左右布局 ✅
+  - 当前 skill ✅（顶 metric + 当前运行 panel）
+  - 项目 skills 全景 ✅（左半 skills 列表 14 项）
+  - history 细分 ✅（3 栏 + mode 分组）
+  - ui-ux-pro-max 用了 ✅（手工应用 SKILL.md 规则；Python 脚本因 Windows Store stub 拦截无法跑，留 v0.4 候选）
+  - 去掉 token/费用 ✅
+- ⏭ **下一步**：推飞书更新 + v0.4 候选（remoting ui-ux-pro-max 微调 / progress.md 时间线条目按时间排序 / 议案池视图）
+
+---
+
+### 会话 19：dashboard v0.2 重构端到端落地
+
+- 🧠 **触发**：Alex 5-2 brainstorm —"token/费用同步不了，重构整个页面"，列 8 个需求（当前/历史会话、任务详情、team/独立模式、skills 全记录、实时/历史按钮、自我升级记录、UI 大改、飞书总结）
+- 🗳 **brainstorm 10 轮拍板**（superpowers:brainstorming 一问一答）：
+  - Q1 数据采集 → **A 装 PostToolUse hook**（v0.0 设计实装）
+  - Q2 数据模型 → **A 两层 = Session(CC启动→关闭) → Task(一次/命令)**
+  - Q3 team 定义 → **B 修正版 = Claude 并行 Agent() ≥2** ；helix 串行多 phase = 独立
+  - Q4 自我升级数据 → **B = progress + findings + git log + task_plan + helix-runs**
+  - Q5 IA → **B SPA 3 tab + URL 路由**（/live, /history, /evolution, /task/:id）；team 详情 = 同 task 内不同 sub_agent
+  - Q6 实时视图 → **B 三段**（顶 60px 概览 / 主区 task 详情 / 右栏 300px 全局事件流）
+  - Q7 历史视图 → **B 两层折叠**（左 session 列表 / 右 task 列表）
+  - Q8 升级视图 → **C 三段**（顶进度树+helix徽章 / 中 progress+git 时间线 / 下 findings 教训卡）
+  - Q9 UI 风格 → **A 深色开发者风**（Linear/Vercel/GitHub Dark/Raycast 参照）
+  - Q10a 实装节奏 → **B 4 段交付**；in-place 改 dashboard/
+  - Q10b 飞书总结 → **B 完整版**（10 决策 + 验收报告 + 截图 + 数据契约 + v0.3 路线）
+- 📝 **设计稿升级** `design/dashboard-draft.md` v0.0 → **v0.2**（加 §2 v0.2 决策记录 / §3 数据契约扩 task_id+UserPromptSubmit / §5 三视图布局 ASCII / §6 失败模式新增 F-8/F-9/F-10/F-11 / §8 验收清单 28 项 / §11 v0.0→v0.2 演化对照）
+- 🛠 **段 1 完成（hook + server + 数据）**：
+  - 写 `hooks/dashboard-emit.cjs`（115 行；PostToolUse / UserPromptSubmit / Stop 三入口；try/catch 全吞；时区 +8h 可逆校验）
+  - 注册 `.claude/settings.local.json` 三个 hook
+  - **F-021 物质化**：hook 时间戳第一版用 `getTimezoneOffset()` 校正错位（Beijing 时区下被抵消成 UTC）—修复为 `d.getTime() + 8h` 直接读 UTC，独立于系统时区
+  - 重写 `dashboard/server.js`（v0.1 504 行 → v0.2 405 行；纯 stdlib；tail jsonl + Session/Task 内存聚合 + REST + SSE + evolution 聚合）
+  - REST endpoints: `/api/health` `/api/live` `/api/sessions` `/api/sessions/:id` `/api/tasks/:id` `/api/evolution`
+  - mode 推断：Agent/Task 工具调用在 500ms 内 ≥2 = team；其他 = independent
+- 🛠 **段 2/3 完成（前端 SPA）**：
+  - 重写 `dashboard/public/index.html`（41 行，纯壳）+ `app.js`（670 行）+ `styles.css`（370 行；CSS Grid + 变量 token；深紫黑 #0a0b0d 底 + 紫 #7c5cff 强调 + 状态语义色绿/黄/灰/红/橙/蓝）
+  - SPA 路由：`/live` `/history` `/evolution` `/task/:id`，`history.pushState` + `popstate`，无 framework
+  - SSE：`EventSource('/sse')`，3s 自动重连
+  - 4 个视图全部跑通（playwright 截图验证）
+- 🛠 **段 4 完成（验收+飞书）**：
+  - 端到端验收：见 §8 验收清单
+  - F-022 物质化：evo-grid 用 `grid-template-rows: auto 1fr auto` 时底部 findings 把中段挤没；改用 flex column + max-height（top 220px / mid 1fr / bot 38%）
+- 🐛 **bug 修复**：① 时间戳 slice(11,19) 在 `2026-5-2` 月日无前导 0 时偏 1 字符 → 改用 `split(' ')[1]`；② tool 名超长（`mcp__plugin_ecc_playwright__browser_resize`）撑破 grid → shortTool() 函数转 `mcp/playwright/resize` + ev-tool 加 ellipsis；③ history 视图 LIVE 徽章误用 mode-team 橙色 → 新增 `.status-live` 绿色独立类
+- 📊 **产出**：
+  - 设计稿 v0.2（dashboard-draft.md +480 行）
+  - hook 1 个（115 行）
+  - server 1 个（405 行）
+  - 前端 3 个（index 41 / app 670 / styles 370）
+  - 截图 4 张（live / history / evolution / task detail）
+- ⏭ **下一步**：推飞书总结文档（task #5）
+
+---
+
 ## 2026-5-1
 
-### 会话 15：M4b session-reporter v0.1.0 落地（task 4.6-4.8 全完成）
+### 会话 16：dashboard skill brainstorm + design v0.0 草案落地（M5+ 候选）
+
+- 🧠 **触发**：Alex 提"既然你自我升级自我进化，能否做实时可观看数据变化的界面？同时监测多 agent 执行模式/模型/时长/过程/数据收集变化"
+- 🗳 **brainstorm 三轮拍板**（按 superpowers:brainstorming 一问一答）：
+  - **Q1 实时性级别** → A 推流实时（候选 A 推流 / B 准实时刷 / C 快照报告，Alex 选 A）
+  - **Q2 事件来源** → E1 纯 Hook 驱动（候选 E1 hook 零侵入 / E2 skill 自 emit 侵入 / E3 混合，先 E1，v0.2 视情况升 E3）
+  - **Q3 UI 形态** → B+C 合体（顶栏 14 卡片墙 + 双栏时间线+详情；正交不冲突）
+  - **Q4 默认配置** → 端口 7777 / 127.0.0.1 only / 不持久化 / 单 session 多 session_id 过滤 / 手动启
+- 📄 **产出 `design/dashboard-draft.md` v0.0**（11 节，383 行）：
+  - §0 责任 + 边界（"用 PostToolUse hook 把工具调用流推到浏览器"）
+  - §1 5 特征自检（独立 ✅ / 足够小 ⚠️ 待定 / 边界清晰 ✅ / 可替换 ✅ / 可复用 ⚠️ 待定）
+  - §2 决策记录（4 个决策含 Why+Risk+Mitigation）
+  - §3 数据契约（jsonl 行 schema + SSE 协议 + 卡片状态推导规则）
+  - §4 三组件设计（hook < 60 行 / server < 250 行 / html < 300 行）
+  - §5 7 个失败模式 + mitigation
+  - §6 10 项验收清单
+  - §7 YAGNI 故意不做（10 项："token 折线图/远程访问/phase emit/历史回放…"）
+  - §8 与现有 14 skill 关系（与 session-reporter 不重叠 / evolution-tracker 可消费 / mode-router 可同源）
+  - §9 实现顺序（4-6h 估算）
+- 🎯 **状态**：v0.0 待 Alex 审；如审过升 v0.1 进入实现门槛；如有调整写 §11 v0.1 决策记录后升版
+- ⏸ **不动手**：按"动代码前必须先在 design/ 写出为什么这么做"铁律，draft 没锁前不写 hook/server/html
+
+
 
 - ✅ **task 4.6**：设计草案 Q1-Q5 全选推荐确认；Base(token: Se8obIsyTa5SmfsOMK8cA9d3nNc / table: tbl6hG1Ldp6o2RWN) + IM 双写；每会话粒度；✅行+结构化；cursor 增量；Stop hook 触发
 - ✅ **task 4.7**：`.claude/skills/session-reporter/SKILL.md` 写成（218 行；4 phase PARSE/DIFF/PUSH/LOG；6 失败模式；cursor 幂等机制）
@@ -401,3 +563,57 @@
 - 📝 学习：lark-cli markdown 入参有 shell argv 限制，必须 chunk + 显式调用 git bash
 - 📝 学习：UTF-8 字节数 ≈ 中文字符数 × 3
 - 📝 学习：lark-cli 不支持 drive 文件夹列表，要么用户给 URL，要么写 wiki my_library
+
+### /helix run 2026-5-2-002259 · "根据design/dashboard-draft.md生成插件dashboard设计稿(SVG+HTML双交付,可Figma import)"
+- promise: **COMPLETE**
+- phases: a1✅ a2✅ a4✅ a5✅ a6✅ a7✅
+- task: 根据design/dashboard-draft.md生成插件dashboard设计稿(SVG+HTML双交付,可Figma import)
+- started → finished: 2026-5-2 00:22:59 → 2026-5-2 00:39:07
+
+### /helix run 2026-5-2-004908 · "把design/dashboard-mockup.html迁到顶层新文件夹/mockups/,然后用design相关skill重做一版更高质量的UI(canva"
+- promise: **COMPLETE**
+- phases: a1✅ a2✅ a4✅ a5✅ a6✅ a7✅
+- task: 把design/dashboard-mockup.html迁到顶层新文件夹/mockups/,然后用design相关skill重做一版更高质量的UI(canvas-design提到但其只输出PNG/PDF,需要确认实际skill选型)
+- started → finished: 2026-5-2 00:49:08 → 2026-5-2 01:10:07
+
+### /helix run 2026-5-2-031552 · "主题色升级为优雅深紫黑 + 新建 dashboard/ 目录实现真实数据响应的监控界面，集成进 helix 入口自动启动，所有面板数据来自真实项目文件，Node"
+- promise: **COMPLETE**
+- phases: a1✅ a2✅ a4✅ a5✅ a6✅ a7✅
+- task: 主题色升级为优雅深紫黑 + 新建 dashboard/ 目录实现真实数据响应的监控界面，集成进 helix 入口自动启动，所有面板数据来自真实项目文件，Node.js SSE 后端 + 飞书总结文档
+- started → finished: 2026-5-2 03:15:52 → 2026-5-2 03:42:05
+
+### /helix run 2026-5-2-035636 · "dashboard/public/index.html 主题换回 Image#3 的深炭黑+琥珀色 Bloomberg 终端风格，同时补齐缺失内容：左侧栏完整（"
+- promise: **COMPLETE**
+- phases: a1✅ a2✅ a4✅ a5✅ a6✅ a7✅
+- task: dashboard/public/index.html 主题换回 Image#3 的深炭黑+琥珀色 Bloomberg 终端风格，同时补齐缺失内容：左侧栏完整（会话信息+token指标+快捷键）、情报面板带彩色严重度徽章、顶部指标栏格式与 mockup 一致
+- started → finished: 2026-5-2 03:56:36 → 2026-5-2 04:08:38
+
+### /helix run 2026-5-2-043621 · "audit dashboard真实数据来源 + 修复所有点击交互：F1-F10侧边栏点击切视图、技能/时间线/情报tab点击切视图、filter按钮点击filt"
+- promise: **COMPLETE**
+- phases: a1✅ a2✅ a4✅ a5✅ a6✅ a7✅
+- task: audit dashboard真实数据来源 + 修复所有点击交互：F1-F10侧边栏点击切视图、技能/时间线/情报tab点击切视图、filter按钮点击filter、token指标bar标注真实/估算来源
+- started → finished: 2026-5-2 04:36:21 → 2026-5-2 04:44:26
+
+### /helix run 2026-5-2-045113 · "1)接入Claude Code session JSONL真实token+成本+上下文 2)删sidebar重复nav F1/F2/F4/F6 3)模式按当前任"
+- promise: **COMPLETE**
+- phases: a2✅ a4✅ a5✅ a6✅ a7✅
+- task: 1)接入Claude Code session JSONL真实token+成本+上下文 2)删sidebar重复nav F1/F2/F4/F6 3)模式按当前任务自动切换独立/团队 4)用ui-ux-pro-max打磨视觉
+- started → finished: 2026-5-2 04:51:13 → 2026-5-2 05:05:54
+
+### /helix run 2026-5-2-051833 · "1)修复token/cost算法对齐/status官方值 借鉴ccstatusline 2)新增30天/今日/会话三档总消费区块 3)删除底部fbar F1-F"
+- promise: **COMPLETE**
+- phases: a2✅ a4✅ a5✅ a6✅ a7✅
+- task: 1)修复token/cost算法对齐/status官方值 借鉴ccstatusline 2)新增30天/今日/会话三档总消费区块 3)删除底部fbar F1-F10只保留当前run ID 4)UI优化 字体增大 主题降饱和度不刺眼
+- started → finished: 2026-5-2 05:18:33 → 2026-5-2 05:44:53
+
+### /helix run 2026-5-2-153541 · "深度核对/status与dashboard的token数据是否一致 修复任何diff"
+- promise: **COMPLETE**
+- phases: a4✅ a5✅ a6✅ a7✅
+- task: 深度核对/status与dashboard的token数据是否一致 修复任何diff
+- started → finished: 2026-5-2 15:35:41 → 2026-5-2 15:56:45
+
+### /helix run 2026-5-2-181813 · "dashboard v0.3 三处修复：1) 各视图加返回主界面入口；2) 验证数据实时性是否真到位；3) 消灭剩余黑空白"
+- promise: **COMPLETE**
+- phases: a1✅ a4✅ a5✅ a6✅ a7✅
+- task: dashboard v0.3 三处修复：1) 各视图加返回主界面入口；2) 验证数据实时性是否真到位；3) 消灭剩余黑空白
+- started → finished: 2026-5-2 18:18:13 → 2026-5-2 18:44:27
