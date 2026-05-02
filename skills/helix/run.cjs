@@ -16,6 +16,7 @@
 //   ❌ 不脱离 session 粒度（一次 /helix = 一条 session record）
 
 const fs = require("fs");
+const net = require("net");
 const path = require("path");
 const { spawn } = require("child_process");
 
@@ -85,9 +86,27 @@ function clearState() {
   if (fs.existsSync(HELIX_STATE)) fs.unlinkSync(HELIX_STATE);
 }
 
+function checkPortInUse(port, host = "127.0.0.1", timeoutMs = 300) {
+  return new Promise((resolve) => {
+    const socket = new net.Socket();
+    let done = false;
+    const finish = (inUse) => {
+      if (done) return;
+      done = true;
+      socket.destroy();
+      resolve(inUse);
+    };
+    socket.setTimeout(timeoutMs);
+    socket.once("connect", () => finish(true));
+    socket.once("timeout", () => finish(false));
+    socket.once("error", () => finish(false));
+    socket.connect(port, host);
+  });
+}
+
 // --- subcommands ---
 
-function cmdStart(task) {
+async function cmdStart(task) {
   const taskStr = (task || "").trim();
   const helix_run_id = genRunId();
 
@@ -120,25 +139,35 @@ function cmdStart(task) {
     phase_reports: [],
   });
 
-  // Auto-start dashboard server (detached, ignore if already running)
+  // Dashboard 自检 + 自启（health check 优先，已运行时不重复 spawn）
   const dashboardPort = parseInt(
     process.env.HARNESS_DASHBOARD_PORT || "7777",
     10,
   );
   const dashboardJs = path.join(PROJECT_DIR, "dashboard", "server.js");
-  if (fs.existsSync(dashboardJs)) {
-    const child = spawn(process.execPath, [dashboardJs], {
-      detached: true,
-      stdio: "ignore",
-      env: { ...process.env, HARNESS_DASHBOARD_PORT: String(dashboardPort) },
-    });
-    child.unref();
-  }
   const dashboardUrl = `http://localhost:${dashboardPort}`;
+  let dashboardStatus;
+  if (!fs.existsSync(dashboardJs)) {
+    dashboardStatus = "missing";
+  } else if (await checkPortInUse(dashboardPort)) {
+    dashboardStatus = "already_running";
+  } else {
+    try {
+      const child = spawn(process.execPath, [dashboardJs], {
+        detached: true,
+        stdio: "ignore",
+        env: { ...process.env, HARNESS_DASHBOARD_PORT: String(dashboardPort) },
+      });
+      child.unref();
+      dashboardStatus = "starting";
+    } catch (e) {
+      dashboardStatus = `spawn_failed: ${e.message}`;
+    }
+  }
   console.error(
     `\n${"━".repeat(56)}\n` +
-      `🟣  HARNESS Dashboard  →  ${dashboardUrl}\n` +
-      `    查看运行状态，随时可打开上方地址\n` +
+      `🟣  HARNESS Dashboard  →  ${dashboardUrl}  [${dashboardStatus}]\n` +
+      `    实时查看 phase 进度 / skill 状态 / helix run\n` +
       `${"━".repeat(56)}\n`,
   );
 
@@ -146,7 +175,13 @@ function cmdStart(task) {
     helix_run_id,
     promise: "NOT_COMPLETE",
     project_dir: PROJECT_DIR,
+    dashboard: {
+      url: dashboardUrl,
+      status: dashboardStatus,
+      note: "可选——不打开也不影响 helix 流程；但建议打开以监控 a1-a8 phase 实时状态",
+    },
     instructions: [
+      `📊 Dashboard：${dashboardUrl}（${dashboardStatus}）— 建议打开浏览器查看实时进度`,
       "你必须严格按 phases 顺序执行；每个 phase 调用对应 run.cjs（脚本会自动 --report 给 helix）",
       "任何 phase passes=false → 立刻暂停 + 报告用户决策；不自动重试（Ralph 反对自宣告）",
       "破坏性操作（git push --force / rm -rf / drop / 改 CI 等）→ 强制 inject a8-risk-guard",
@@ -298,11 +333,11 @@ function usage() {
   console.error("  node skills/helix/run.cjs --status");
 }
 
-function main() {
+async function main() {
   const args = process.argv.slice(2);
   const sub = args[0];
   if (sub === "--start") {
-    cmdStart(args.slice(1).join(" "));
+    await cmdStart(args.slice(1).join(" "));
   } else if (sub === "--report") {
     cmdReport(args[1], args[2] || "{}");
   } else if (sub === "--finalize") {
@@ -315,4 +350,7 @@ function main() {
   }
 }
 
-main();
+main().catch((e) => {
+  console.error(`[helix] fatal: ${e.message}`);
+  process.exit(1);
+});

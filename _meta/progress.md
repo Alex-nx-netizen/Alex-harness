@@ -4,6 +4,27 @@
 
 ---
 
+## 2026-5-3
+
+### 会话 24：helix 入口接 dashboard 自检+提示（A+B 落地）
+
+- 🧠 **触发**：Alex 问"调用 helix 入口时 dashboard 会自动运行吗？会不会提醒用户？"——审计代码后发现 `/helix` 入口完全黑盒：`run.cjs` 虽然 spawn 了 dashboard 但只往 stderr 打 URL，plan JSON（LLM 看到的 stdout）里没有 dashboard 字段；SKILL.md 也零提及，LLM 没信号去主动告知用户
+- 🛠 **改动**：
+  - `skills/helix/run.cjs`：
+    - 顶部加 `const net = require("net")`
+    - 加 `checkPortInUse(port, host, timeoutMs)` helper（Promise 包 net.Socket connect / timeout / error）
+    - `cmdStart` 改 async；先 health check 再决定 spawn；状态分 `starting / already_running / missing / spawn_failed`
+    - plan JSON 加 `dashboard:{url, status, note}` 字段；instructions[0] 改成 dashboard 提示
+    - `main()` 改 async + `.catch` 兜底
+  - `skills/helix/SKILL.md` Step 1 加"Dashboard 自动启动 + 必须告知用户"段：要求 LLM 输出 plan 后用一句中文主动提示用户打开浏览器；列出 4 种 status 含义
+- ✅ **实跑验证**（两次连发 `--start`）：
+  - 第一次：`status=starting`，curl /api/health 返回 `{"ok":true,"port":7777}` ✅
+  - 第二次：`status=already_running`，没重复 spawn ✅
+  - 上面两条 smoke test run（id 2026-5-3-021105 / -021235）已在 helix-runs.jsonl 留痕，属预期噪音
+- 📌 **待观察**：detached spawn 在 Windows 真跑长 helix 时是否被父进程退出连带 kill；`child.unref()` 已加，按 Node 文档应能脱离
+
+---
+
 ## 2026-5-2
 
 ### 会话 23：dashboard v0.3 三处反馈修复（F1-F4 跨视图跳转 / phase 标签 / 宽屏黑空白）
@@ -617,3 +638,4 @@
 - phases: a1✅ a4✅ a5✅ a6✅ a7✅
 - task: dashboard v0.3 三处修复：1) 各视图加返回主界面入口；2) 验证数据实时性是否真到位；3) 消灭剩余黑空白
 - started → finished: 2026-5-2 18:18:13 → 2026-5-2 18:44:27
+

@@ -33,7 +33,20 @@ status:
 node skills/helix/run.cjs --start "<用户的任务描述>"
 ```
 
-输出 JSON 含 `helix_run_id` 和 `phases` 计划。**记下 helix_run_id**，后续 phase 都关联到它。
+输出 JSON 含 `helix_run_id`、`phases` 计划，以及 **`dashboard` 字段**（含 `url` + `status`）。**记下 helix_run_id**，后续 phase 都关联到它。
+
+**Dashboard 自动启动 + 必须告知用户**：
+
+`run.cjs --start` 内部已做了 dashboard 端口 health check：
+- `status=already_running` → dashboard 早就在跑，直接复用
+- `status=starting` → 本次启动了一个新的（detached 进程，不影响 helix 流程）
+- `status=missing` / `spawn_failed` → 文件不存在 / 启动失败，记录但不阻塞
+
+**LLM 在 Step 1 输出 JSON 后，必须用一句中文提示用户**（即使用户没问也要主动说），格式参考：
+
+> 📊 Dashboard 已就绪：http://localhost:7777（status=already_running）— 浏览器打开可看到 a1-a8 phase 实时进度、skill 状态和本次 helix run 详情。
+
+不打开也不影响 helix 流程；这是给用户的可观察性入口。
 
 ### Step 2：上下文加载
 
