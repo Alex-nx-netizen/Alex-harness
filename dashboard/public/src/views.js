@@ -72,9 +72,13 @@ export function LiveView() {
       <div style="display:grid; grid-template-columns: 1.4fr 1fr; gap:16px">
 
         <!-- LEFT: timeline -->
-        <${Card} eyebrow="LIVE · 事件时间线" title="最近 60 条" actions=${html`<${Tag} kind="live">SSE patch · ${health.event_rate.toFixed(1)} evt/s<//>`}>
+        <${Card} eyebrow="LIVE · 事件时间线" title="最近事件" actions=${html`<${Tag} kind="live">SSE · ${health.event_rate.toFixed(2)} evt/s<//>`}>
           <div class="timeline">
-            ${events.slice(0, 18).map(ev => html`
+            ${events.length === 0 ? html`
+              <div style="padding:32px; text-align:center; color:var(--t3); font-family:var(--ff-mono); font-size:12px">
+                等待事件 · 运行 Claude Code 时事件会实时出现
+              </div>
+            ` : events.slice(0, 18).map(ev => html`
               <div class=${'tl-row' + (ev.__new ? ' new' : '')}>
                 <div class="ts">${new Date(ev.ts_ms).toLocaleTimeString('zh-CN', { hour12: false })}</div>
                 <div class="type">${ev.type}</div>
@@ -82,10 +86,10 @@ export function LiveView() {
                   <span class="ref">${ev.skill_id}</span>
                   ${ev.payload.duration_ms != null ? html` · ${fmtMs(ev.payload.duration_ms)}` : ''}
                   ${ev.payload.tool ? html` · tool=${ev.payload.tool}` : ''}
-                  ${ev.payload.file ? html` · ${ev.payload.file}` : ''}
+                  ${ev.payload.file ? html` · ${ev.payload.file.split('/').slice(-1)[0]}` : ''}
                   ${ev.payload.status === 'failed' ? html` · <${Tag} kind="err">FAILED<//>` : ''}
                 </div>
-                <div class="mono text-xs muted">#${ev.id.toString(36)}</div>
+                <div class="mono text-xs muted">#${ev.session_id ? ev.session_id.slice(-4) : '—'}</div>
               </div>
             `)}
           </div>
@@ -93,75 +97,78 @@ export function LiveView() {
 
         <!-- RIGHT: skills + tasks -->
         <div class="flex-col gap-4">
-          <${Card} eyebrow="SKILLS · 今日" title="频次 / 通过率 / 平均耗时" actions=${html`<button class="btn ghost">展开<//>`}>
-            <table class="data">
-              <thead><tr><th>SKILL</th><th class="right">RUNS</th><th class="right">PASS</th><th class="right">AVG</th></tr></thead>
-              <tbody>
-                ${skills.slice(0,7).map(s => html`
-                  <tr class="row" onClick=${() => $drawerSkill.set(s.id)}>
-                    <td><span class="mono">${s.id}</span></td>
-                    <td class="num">${s.freq}</td>
-                    <td><${BarInline} value=${s.pass} color=${s.pass < 0.7 ? 'err' : s.pass < 0.85 ? 'warn' : 'ok'} format=${v => (v*100).toFixed(0) + '%'} /></td>
-                    <td class="num mono">${fmtMs(s.avgMs)}</td>
-                  </tr>
-                `)}
-              </tbody>
-            </table>
+          <${Card} eyebrow="SKILLS · 项目" title="状态 / 运行次数 / 通过率" actions=${html`<button class="btn ghost">展开<//>`}>
+            ${skills.length === 0 ? html`
+              <div class="muted text-sm" style="padding:16px; text-align:center">加载中...</div>
+            ` : html`
+              <table class="data">
+                <thead><tr><th>SKILL</th><th>状态</th><th class="right">RUNS</th><th class="right">PASS</th></tr></thead>
+                <tbody>
+                  ${skills.slice(0, 7).map(s => html`
+                    <tr class="row" onClick=${() => $drawerSkill.set(s.id)}>
+                      <td><span class="mono">${s.id}</span></td>
+                      <td><${StatusDot} status=${s.state === 'running' ? 'running' : s.state === 'error' ? 'failed' : s.state === 'done' ? 'done' : 'archived'}/><span class="text-xs muted">${s.state}</span></td>
+                      <td class="num">${s.freq}</td>
+                      <td><${BarInline} value=${s.pass} color=${s.pass < 0.5 ? 'err' : s.pass < 0.8 ? 'warn' : 'ok'} format=${v => (v*100).toFixed(0) + '%'} /></td>
+                    </tr>
+                  `)}
+                </tbody>
+              </table>
+            `}
           <//>
 
-          <${Card} eyebrow="TASKS · ACTIVE" title="进行中 / 最近完成">
-            <table class="data">
-              <tbody>
-                ${tasks.slice(0,5).map(t => html`
-                  <tr class="row">
-                    <td><${StatusDot} status=${t.status}/><span class="mono">${t.task_id}</span></td>
-                    <td><span class="muted text-xs">${t.skill}</span></td>
-                    <td class="num mono">${t.duration_ms ? fmtMs(t.duration_ms) : '运行中'}</td>
-                    <td class="right">
-                      ${t.status === 'failed' ? html`<${Tag} kind="err">failed<//>` :
-                        t.status === 'running' ? html`<${Tag} kind="live">running<//>` :
-                        t.feedback === 1 ? html`<${Tag} kind="acc">👍<//>` :
-                        t.feedback === -1 ? html`<${Tag} kind="err">👎<//>` :
-                        html`<${Tag}>done<//>`}
-                    </td>
-                  </tr>
-                `)}
-              </tbody>
-            </table>
+          <${Card} eyebrow="TASKS · 最近" title="进行中 / 最近完成">
+            ${tasks.length === 0 ? html`
+              <div class="muted text-sm" style="padding:16px; text-align:center">暂无任务记录</div>
+            ` : html`
+              <table class="data">
+                <tbody>
+                  ${tasks.slice(0, 5).map(t => html`
+                    <tr class="row">
+                      <td><${StatusDot} status=${t.status}/><span class="mono text-xs">${t.task_id}</span></td>
+                      <td><span class="muted text-xs" style="max-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:block">${t.label || t.skill}</span></td>
+                      <td class="num mono">${t.duration_ms ? fmtMs(t.duration_ms) : '—'}</td>
+                      <td class="right">
+                        ${t.status === 'failed' ? html`<${Tag} kind="err">failed<//>` :
+                          t.status === 'running' ? html`<${Tag} kind="live">running<//>` :
+                          html`<${Tag}>done<//>`}
+                      </td>
+                    </tr>
+                  `)}
+                </tbody>
+              </table>
+            `}
           <//>
         </div>
       </div>
 
       <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:16px">
-        <${Card} eyebrow="FINDINGS · 活跃" title="问题与发现" actions=${html`<${Tag} kind="acc">${findings.filter(f=>f.status==='alive').length} alive<//>`}>
-          ${findings.filter(f => f.status === 'alive').slice(0,4).map(f => html`
-            <div style="padding:10px 0; border-bottom:1px solid var(--border-soft)">
-              <div class="flex gap-2" style="align-items:center; margin-bottom:4px">
-                <span class="mono accent" style="color:var(--accent); font-size:11px">${f.id}</span>
-                <span class="fw-500" style="color:var(--t1); font-size:13px">${f.title}</span>
-                <span class="mono muted text-xs" style="margin-left:auto">${relTime(f.updated_ms)}</span>
+        <${Card} eyebrow="FINDINGS · 活跃" title="已验证的发现" actions=${html`<${Tag} kind="acc">${findings.filter(f=>f.status==='alive').length} alive<//>`}>
+          ${findings.filter(f => f.status === 'alive').length === 0
+            ? html`<div class="muted text-sm" style="padding:16px; text-align:center">暂无活跃 findings · 查看 _meta/findings.md</div>`
+            : findings.filter(f => f.status === 'alive').slice(0, 4).map(f => html`
+              <div style="padding:10px 0; border-bottom:1px solid var(--border-soft)">
+                <div class="flex gap-2" style="align-items:center; margin-bottom:4px">
+                  <span class="mono accent" style="color:var(--accent); font-size:11px">${f.id}</span>
+                  <span class="fw-500" style="color:var(--t1); font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:280px">${f.title}</span>
+                </div>
+                <div class="text-xs muted" style="line-height:1.5">${(f.body || '').slice(0, 120)}${f.body && f.body.length > 120 ? '…' : ''}</div>
               </div>
-              <div class="text-xs muted">${f.body}</div>
-              ${(f.related_q.length || f.related_h.length) ? html`
-                <div class="flex gap-2" style="margin-top:6px">
-                  ${f.related_q.map(q => html`<${Tag} kind="info">${q}<//>`)}
-                  ${f.related_h.map(h => html`<${Tag} kind="acc">${h}<//>`)}
-                </div>` : ''}
-            </div>
-          `)}
+            `)}
         <//>
 
-        <${Card} eyebrow="PROGRESS · 铁律 1" title="commit ↔ 进度对账" actions=${html`<${Tag} kind="warn">7 missing<//>`}>
-          ${progress.slice(0,5).map(p => html`
-            <div style="padding:10px 0; border-bottom:1px solid var(--border-soft)">
-              <div class="flex gap-2" style="align-items:center; margin-bottom:4px">
-                <span class="mono" style="color:var(--accent); font-size:11px">${p.commit}</span>
-                <span class="muted mono text-xs" style="margin-left:auto">${relTime(p.ts_ms)}</span>
+        <${Card} eyebrow="PROGRESS · git log" title="最近提交记录">
+          ${progress.length === 0
+            ? html`<div class="muted text-sm" style="padding:16px; text-align:center">暂无提交记录</div>`
+            : progress.slice(0, 5).map(p => html`
+              <div style="padding:10px 0; border-bottom:1px solid var(--border-soft)">
+                <div class="flex gap-2" style="align-items:center; margin-bottom:4px">
+                  <span class="mono" style="color:var(--accent); font-size:11px">${p.commit}</span>
+                  <span class="muted mono text-xs" style="margin-left:auto">${p.ts_ms ? relTime(p.ts_ms) : '—'}</span>
+                </div>
+                <div class="text-sm" style="color:var(--t1); overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${p.body}</div>
               </div>
-              <div class="text-sm" style="color:var(--t1)">${p.body}</div>
-              ${p.findings.length ? html`<div class="flex gap-2" style="margin-top:6px">${p.findings.map(f => html`<${Tag} kind="acc">${f}<//>`)}</div>` : ''}
-            </div>
-          `)}
+            `)}
         <//>
       </div>
     </div>
@@ -218,7 +225,11 @@ export function InsightsView() {
               `;
             })}
           </div>
-          <div class="text-xs muted" style="margin-top:8px">a2-repo-sensor 在右下角红圈 · 高频低过 · 关联 Q6 / F-012 · 点击气泡查看 skill 详情</div>
+          <div class="text-xs muted" style="margin-top:8px">
+            ${skills.filter(s=>s.pass<0.5&&s.freq>0).length > 0
+              ? skills.filter(s=>s.pass<0.5&&s.freq>0).slice(0,2).map(s=>s.id).join('、') + ' 在右下角 · 高频低过 · 点击气泡查看详情'
+              : skills.length > 0 ? '所有活跃 skill 运行正常 · 点击气泡查看 skill 详情' : '暂无 skill 数据 · 运行 Claude Code 后自动出现'}
+          </div>
         <//>
 
         <${Card} eyebrow="USAGE HEATMAP" title="过去 14 天 × 每小时调用密度">
@@ -229,7 +240,7 @@ export function InsightsView() {
             })}
           </div>
           <div class="heatmap-axis"><span>0:00</span><span>6:00</span><span>12:00</span><span>18:00</span><span>23:00</span></div>
-          <div class="text-xs muted" style="margin-top:10px">深夜 22-2 点是主力工作时段 · 周末活动减半 · D-9 14-17 点黑洞 = ingest 中断（已修）</div>
+          <div class="text-xs muted" style="margin-top:10px">颜色深度 = 调用密度 · 浅色 = 低活动 · 深色 = 高活动 · 历史数据积累后自动填充</div>
         <//>
       </div>
 
@@ -282,6 +293,8 @@ export function HealthView() {
   const health = useStore($health);
   const kpis = useStore($kpis);
 
+  const allOk = health.workers.length === 0 || health.workers.every(w => w.status === 'running');
+
   return html`
     <div class="page">
       <div class="page-header">
@@ -290,37 +303,51 @@ export function HealthView() {
           <h1 class="page-title">harness 自己跑得健不健康</h1>
         </div>
         <div class="page-actions">
-          <${Tag} kind="live">所有 worker 在线<//>
+          <${Tag} kind=${allOk ? 'live' : 'warn'}>${allOk ? '所有 worker 在线' : '有 worker 异常'}<//>
         </div>
       </div>
 
       <div class="kpi-grid" style="margin-bottom:18px">
-        <${Kpi} label="INGEST LAG" value=${health.ingest_lag_ms.toFixed(0) + 'ms'}
-                delta=${health.ingest_lag_ms < 500 ? '< SLO 500ms' : '⚠ 超 SLO'}
-                deltaDir=${health.ingest_lag_ms < 500 ? 'up' : 'down'}
-                spark=${health.ingest_lag_series.slice(-30)}
-                sparkColor="var(--st-info)" />
-        <${Kpi} label="EVENT RATE" value=${health.event_rate.toFixed(1) + ' /s'} delta="p99 < 80ms" deltaDir="up"
+        <${Kpi} label="EVENT RATE" value=${health.event_rate.toFixed(2) + ' /s'}
+                delta="实时事件摄入速率"
                 spark=${health.event_rate_series.slice(-30)} sparkColor="var(--st-live)" />
-        <${Kpi} label="DB SIZE" value=${health.db_size_mb.toFixed(1) + ' MB'} delta="+0.3MB / 1h" />
-        <${Kpi} label="MEMORY" value=${health.mem_mb + ' MB'} delta="< 120MB SLO" deltaDir="up" />
-        <${Kpi} label="CPU IDLE" value=${(health.cpu_idle*100).toFixed(0) + '%'} delta="≥ 95% SLO" deltaDir="up" />
-        <${Kpi} label="EVENTS TOTAL" value=${fmtNum(kpis.events_total)} delta="自 v2 上线" />
+        <${Kpi} label="JSONL SIZE" value=${health.db_size_mb.toFixed(2) + ' MB'}
+                delta="live-events.jsonl" />
+        <${Kpi} label="MEMORY" value=${health.mem_mb.toFixed(0) + ' MB'}
+                delta=${'RSS ' + (health.mem_rss_mb || 0).toFixed(0) + ' MB'} deltaDir="up" />
+        <${Kpi} label="UPTIME" value=${health.uptime_s > 3600
+                  ? (health.uptime_s/3600).toFixed(1) + 'h'
+                  : health.uptime_s > 60
+                    ? (health.uptime_s/60).toFixed(0) + 'm'
+                    : (health.uptime_s || 0) + 's'}
+                delta="服务器运行时长" />
+        <${Kpi} label="SESSIONS" value=${health.sessions || 0}
+                delta=${'活跃 ' + (health.live_sessions || 0) + ' 个'} />
+        <${Kpi} label="TASKS TOTAL" value=${fmtNum(health.tasks || 0)}
+                delta="已聚合" />
       </div>
 
       <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px">
-        <${Card} eyebrow="WORKERS · 心跳" title="独立进程状态">
+        <${Card} eyebrow="WORKERS · 实时进程" title="服务器组件状态">
           <table class="data">
-            <thead><tr><th>WORKER</th><th>状态</th><th class="right">最后心跳</th><th class="right">指标</th></tr></thead>
+            <thead><tr><th>WORKER</th><th>状态</th><th class="right">指标</th></tr></thead>
             <tbody>
-              ${health.workers.map(w => html`
-                <tr>
-                  <td><span class="mono fw-500" style="color:var(--t1)">${w.name}</span></td>
-                  <td><${StatusDot} status=${w.status}/>${w.status}</td>
-                  <td class="num mono"><span class=${(Date.now() - w.last_beat_ms) > 30_000 ? 'warn' : ''}>${relTime(w.last_beat_ms)} 前</span></td>
-                  <td class="right text-xs muted mono">${Object.entries(w.payload).map(([k,v]) => k + '=' + v).join(' · ')}</td>
-                </tr>
-              `)}
+              ${health.workers.length === 0
+                ? html`<tr><td colspan="3" class="muted text-sm" style="padding:16px; text-align:center">服务器未报告 worker 状态</td></tr>`
+                : health.workers.map(w => html`
+                  <tr>
+                    <td><span class="mono fw-500" style="color:var(--t1)">${w.name}</span></td>
+                    <td><${StatusDot} status=${w.status}/>${w.status}</td>
+                    <td class="right text-xs muted mono">
+                      ${w.payload ? Object.entries(w.payload).map(([k,v]) => k + '=' + v).join(' · ') : '—'}
+                    </td>
+                  </tr>
+                `)}
+              <tr>
+                <td><span class="mono fw-500" style="color:var(--t1)">sse-broker</span></td>
+                <td><${StatusDot} status="running"/>running</td>
+                <td class="right text-xs muted mono">clients=${health.sse_clients || 0}</td>
+              </tr>
             </tbody>
           </table>
         <//>
@@ -328,27 +355,50 @@ export function HealthView() {
         <${Card} eyebrow="SLO 看板" title="目标 vs 实际">
           <table class="data">
             <tbody>
-              <tr><td>事件吞吐</td><td><${BarInline} value=${health.event_rate} max=${30} color="ok" format=${v => v.toFixed(1) + '/s'} /></td><td class="right text-xs muted">≥ 5/s · ✓</td></tr>
-              <tr><td>db 写入 p99</td><td><${BarInline} value=${0.42} max=${1} color="ok" format=${v => v.toFixed(2) + 'ms'} /></td><td class="right text-xs muted">${'< 1ms · ✓'}</td></tr>
-              <tr><td>SSE p99</td><td><${BarInline} value=${health.ingest_lag_ms / 1000} max=${0.08} color=${health.ingest_lag_ms > 80 ? 'warn' : 'ok'} format=${v => (v*1000).toFixed(0) + 'ms'} /></td><td class="right text-xs muted">${'< 80ms'}</td></tr>
-              <tr><td>parse 失败率</td><td><${BarInline} value=${0.04} max=${1} color="ok" format=${v => v.toFixed(2) + '%'} /></td><td class="right text-xs muted">${'< 0.1% · ✓'}</td></tr>
-              <tr><td>内存稳态</td><td><${BarInline} value=${health.mem_mb} max=${120} color="ok" format=${v => v.toFixed(0) + 'MB'} /></td><td class="right text-xs muted">${'< 120MB · ✓'}</td></tr>
-              <tr><td>CPU idle</td><td><${BarInline} value=${health.cpu_idle} max=${1} color="ok" format=${v => (v*100).toFixed(0) + '%'} /></td><td class="right text-xs muted">≥ 95% · ✓</td></tr>
+              <tr>
+                <td>事件摄入速率</td>
+                <td><${BarInline} value=${Math.min(health.event_rate, 10)} max=${10} color="ok" format=${v => v.toFixed(2) + '/s'} /></td>
+                <td class="right text-xs muted">实时</td>
+              </tr>
+              <tr>
+                <td>内存使用</td>
+                <td><${BarInline} value=${health.mem_mb} max=${512} color=${health.mem_mb > 400 ? 'warn' : 'ok'} format=${v => v.toFixed(0) + 'MB'} /></td>
+                <td class="right text-xs muted">&lt; 512MB</td>
+              </tr>
+              <tr>
+                <td>SSE 客户端</td>
+                <td><${BarInline} value=${health.sse_clients || 0} max=${10} color="ok" format=${v => v.toFixed(0) + ' 个'} /></td>
+                <td class="right text-xs muted">当前连接</td>
+              </tr>
+              <tr>
+                <td>日志文件</td>
+                <td><${BarInline} value=${health.db_size_mb} max=${100} color=${health.db_size_mb > 80 ? 'warn' : 'ok'} format=${v => v.toFixed(1) + 'MB'} /></td>
+                <td class="right text-xs muted">&lt; 100MB</td>
+              </tr>
             </tbody>
           </table>
         <//>
       </div>
 
       <div style="margin-top:16px">
-        <${Card} eyebrow="DEAD LETTER · parse 失败" title="未识别的事件原文" actions=${html`<button class="btn">修 parser<//>`}>
-          <table class="data">
-            <thead><tr><th>TS</th><th>SOURCE</th><th>错误</th><th>原文</th></tr></thead>
-            <tbody>
-              <tr><td class="mono text-xs muted">15:42:11</td><td class="mono text-xs">hook/post-tool</td><td><${Tag} kind="err">unexpected schema_v3<//></td><td class="mono text-xs muted">{"v":3,"kind":"obs",...}</td></tr>
-              <tr><td class="mono text-xs muted">15:38:02</td><td class="mono text-xs">hook/post-tool</td><td><${Tag} kind="err">unexpected schema_v3<//></td><td class="mono text-xs muted">{"v":3,"kind":"obs",...}</td></tr>
-              <tr><td class="mono text-xs muted">15:24:55</td><td class="mono text-xs">log_file</td><td><${Tag} kind="warn">malformed ts<//></td><td class="mono text-xs muted">[??] task_start ...</td></tr>
-            </tbody>
-          </table>
+        <${Card} eyebrow="JSONL · live-events" title="事件文件信息">
+          <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:14px">
+            <div class="kpi sub" style="background:var(--bg-sub); padding:14px; border-radius:8px">
+              <div class="lbl">FILE SIZE</div>
+              <div class="val" style="font-size:20px">${health.db_size_mb.toFixed(2)} MB</div>
+              <div class="muted text-xs" style="margin-top:4px">${fmtNum(health.jsonl_size_bytes || 0)} bytes</div>
+            </div>
+            <div class="kpi sub" style="background:var(--bg-sub); padding:14px; border-radius:8px">
+              <div class="lbl">BYTES READ</div>
+              <div class="val" style="font-size:20px">${fmtNum(health.jsonl_size_bytes || 0)}</div>
+              <div class="muted text-xs" style="margin-top:4px">已处理字节数</div>
+            </div>
+            <div class="kpi sub" style="background:var(--bg-sub); padding:14px; border-radius:8px">
+              <div class="lbl">SKILLS</div>
+              <div class="val" style="font-size:20px">${health.skills_count || 0}</div>
+              <div class="muted text-xs" style="margin-top:4px">项目 skill 总数</div>
+            </div>
+          </div>
         <//>
       </div>
     </div>
@@ -542,52 +592,135 @@ export function TasksView() {
 }
 
 // ============================================================
-// DATA VIEW (schema browser)
+// DATA VIEW (storage browser)
 // ============================================================
 export function DataView() {
-  const tables = [
-    { name: 'raw_events',       rows: 248_017, size: '94.2 MB', desc: 'append-only · 事件主表' },
-    { name: 'fact_tasks',       rows: 12_402,  size: '6.1 MB',  desc: '从 raw_events 汇总 · 索引: started_ms, status' },
-    { name: 'findings',         rows: 8,       size: '12 KB',   desc: 'Q/F/H 三件套 · liveness 字段' },
-    { name: 'hypotheses',       rows: 3,       size: '4 KB',    desc: '关联 finding ids' },
-    { name: 'questions',        rows: 4,       size: '3 KB',    desc: 'open / answered / deprecated' },
-    { name: 'progress_entries', rows: 142,     size: '38 KB',   desc: '与 commit 一一对应（铁律 1）' },
-    { name: 'insights',         rows: 18,      size: '24 KB',   desc: 'worker 缓存 · roi / anomaly / next_action' },
-    { name: 'events_5min',      rows: 4_032,   size: '720 KB',  desc: '5 分钟桶 rollup · 14 天保留' },
-    { name: 'events_1h',        rows: 336,     size: '60 KB',   desc: '小时桶 rollup' },
-    { name: 'events_1d',        rows: 14,      size: '3 KB',    desc: '天桶 rollup' },
-    { name: 'worker_heartbeat', rows: 4,       size: '1 KB',    desc: '每 5s 写一次' },
-    { name: 'ingest_cursor',    rows: 6,       size: '2 KB',    desc: '断点续读偏移量' },
-    { name: 'dead_letter',      rows: 23,      size: '8 KB',    desc: 'parse 失败的原始行' },
-    { name: 'search_idx',       rows: 8_241,   size: '2.1 MB',  desc: 'FTS5 虚拟表 · unicode61' },
+  const health = useStore($health);
+  const kpis = useStore($kpis);
+
+  const stores = [
+    {
+      name: 'live-events.jsonl',
+      kind: 'append-only log',
+      count: fmtNum(health.jsonl_size_bytes || 0) + ' bytes',
+      size: health.db_size_mb.toFixed(2) + ' MB',
+      desc: '事件主日志 · tail 实时摄入 · SSE 广播',
+      status: health.db_size_mb > 0 ? 'ok' : 'warn',
+    },
+    {
+      name: 'sessions (memory)',
+      kind: 'in-memory map',
+      count: fmtNum(health.sessions || 0),
+      size: '—',
+      desc: 'Session 聚合层 · 每次启动从 JSONL 重建',
+      status: health.sessions > 0 ? 'ok' : 'idle',
+    },
+    {
+      name: 'tasks (memory)',
+      kind: 'in-memory map',
+      count: fmtNum(health.tasks || 0),
+      size: '—',
+      desc: 'Task 聚合层 · 2 层 session→task 模型',
+      status: health.tasks > 0 ? 'ok' : 'idle',
+    },
+    {
+      name: '_meta/findings.md',
+      kind: 'markdown',
+      count: fmtNum(kpis.finding_alive + kpis.finding_stale) + ' findings',
+      size: '—',
+      desc: '已验证 / 待验证 / 死路 三分类 · server 解析',
+      status: 'ok',
+    },
+    {
+      name: '_meta/helix-runs.jsonl',
+      kind: 'append-only log',
+      count: '—',
+      size: '—',
+      desc: 'Helix 多阶段 run 记录 · phase_report + finalize',
+      status: 'ok',
+    },
+    {
+      name: '_meta/progress.md',
+      kind: 'markdown',
+      count: '—',
+      size: '—',
+      desc: '进度日志 · 铁律 1: 每任务对应一条记录',
+      status: 'ok',
+    },
+    {
+      name: 'skills/*/logs/runs.jsonl',
+      kind: 'per-skill log',
+      count: fmtNum(health.skills_count || 0) + ' skills',
+      size: '—',
+      desc: 'Skill 运行记录 · passes / summary · 每 skill 独立文件',
+      status: health.skills_count > 0 ? 'ok' : 'idle',
+    },
+    {
+      name: 'SSE broker (memory)',
+      kind: 'in-process',
+      count: (health.sse_clients || 0) + ' clients',
+      size: '—',
+      desc: 'Server-Sent Events · /sse endpoint · 实时推送',
+      status: health.sse_clients > 0 ? 'ok' : 'idle',
+    },
   ];
+
   return html`
     <div class="page">
       <div class="page-header">
         <div>
           <div class="page-subtitle">/ data · 数据层</div>
-          <h1 class="page-title">SQLite WAL · 14 张表 · 142.7 MB</h1>
+          <h1 class="page-title">JSONL + Markdown · 零依赖存储架构</h1>
         </div>
         <div class="page-actions">
-          <button class="btn">.backup</button>
-          <button class="btn">VACUUM</button>
+          <span class="muted text-xs mono">Node stdlib only · no SQLite · no external deps</span>
         </div>
       </div>
-      <${Card}>
+
+      <div class="kpi-grid" style="margin-bottom:18px">
+        <${Kpi} label="JSONL SIZE" value=${health.db_size_mb.toFixed(2) + ' MB'} delta="live-events.jsonl" />
+        <${Kpi} label="SESSIONS" value=${fmtNum(health.sessions || 0)} delta=${'live: ' + (health.live_sessions || 0)} />
+        <${Kpi} label="TASKS" value=${fmtNum(health.tasks || 0)} delta="内存中" />
+        <${Kpi} label="SKILLS" value=${health.skills_count || 0} delta="已扫描" />
+        <${Kpi} label="FINDINGS" value=${kpis.finding_alive + kpis.finding_stale} delta=${kpis.finding_alive + ' alive'} />
+        <${Kpi} label="EVENT RATE" value=${health.event_rate.toFixed(2) + '/s'} delta="滚动 60s" sparkColor="var(--st-live)" spark=${health.event_rate_series.slice(-30)} />
+      </div>
+
+      <${Card} eyebrow="STORAGE · 数据源" title="存储层组件">
         <table class="data">
-          <thead><tr><th>TABLE</th><th class="right">ROWS</th><th class="right">SIZE</th><th>说明</th></tr></thead>
+          <thead><tr><th>组件</th><th>类型</th><th class="right">数量</th><th class="right">大小</th><th>说明</th></tr></thead>
           <tbody>
-            ${tables.map(t => html`
+            ${stores.map(s => html`
               <tr class="row">
-                <td><span class="mono fw-500" style="color:var(--t1)">${t.name}</span></td>
-                <td class="num mono">${fmtNum(t.rows)}</td>
-                <td class="num mono">${t.size}</td>
-                <td class="text-sm muted">${t.desc}</td>
+                <td><span class="mono fw-500" style="color:var(--t1)">${s.name}</span></td>
+                <td><span class="muted text-xs mono">${s.kind}</span></td>
+                <td class="num mono">${s.count}</td>
+                <td class="num mono">${s.size}</td>
+                <td class="text-sm muted">${s.desc}</td>
               </tr>
             `)}
           </tbody>
         </table>
       <//>
+
+      <div style="margin-top:16px">
+        <${Card} eyebrow="ARCHITECTURE · 架构说明" title="数据流">
+          <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:14px">
+            <div class="kpi sub" style="background:var(--bg-sub); padding:14px; border-radius:8px">
+              <div class="lbl">INGEST</div>
+              <div class="val" style="font-size:14px; margin-top:4px">tail JSONL → processEvent → sessions/tasks maps</div>
+            </div>
+            <div class="kpi sub" style="background:var(--bg-sub); padding:14px; border-radius:8px">
+              <div class="lbl">BROADCAST</div>
+              <div class="val" style="font-size:14px; margin-top:4px">new event → SSE broadcast → frontend stores</div>
+            </div>
+            <div class="kpi sub" style="background:var(--bg-sub); padding:14px; border-radius:8px">
+              <div class="lbl">QUERY</div>
+              <div class="val" style="font-size:14px; margin-top:4px">REST /api/* → in-memory read → JSON response</div>
+            </div>
+          </div>
+        <//>
+      </div>
     </div>
   `;
 }

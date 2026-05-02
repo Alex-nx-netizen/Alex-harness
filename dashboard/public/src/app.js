@@ -8,7 +8,7 @@ const useStore = window.__useStore;
 import './views.js';                 // pulls components + stores transitively
 const { Tag, StatusDot, Sparkline, fmtMs, fmtNum, fmtPct, relTime } = window.__C;
 
-import { $route, $cmdkOpen, $drawerSkill, $events, $health, $kpis, $skills, $findings, $searchIndex } from './stores.js';
+import { $route, $cmdkOpen, $drawerSkill, $events, $health, $kpis, $skills, $findings, $searchIndex, $sseConnected } from './stores.js';
 const { LiveView, InsightsView, HealthView, FindingsView, TasksView, DataView } = window.__VIEWS;
 
 // —— Sidebar —— 
@@ -59,6 +59,7 @@ function Sidebar() {
 // —— Topbar ——
 function Topbar() {
   const health = useStore($health);
+  const sseOk = useStore($sseConnected);
   return html`
     <header class="topbar">
       <div class="brand">
@@ -72,9 +73,12 @@ function Topbar() {
         <span class="kbd">⌘K</span>
       </div>
       <div class="right">
-        <div class="pill"><span class="dot"></span><span>SSE 已连</span></div>
-        <span>ingest <span class="mono" style=${'color:' + (health.ingest_lag_ms < 500 ? 'var(--st-live)' : 'var(--st-warn)')}>${health.ingest_lag_ms.toFixed(0)}ms</span></span>
-        <span>rate <span class="mono" style="color:var(--t1)">${health.event_rate.toFixed(1)}/s</span></span>
+        <div class="pill">
+          <span class="dot" style=${sseOk ? '' : 'background:var(--st-warn); box-shadow:0 0 8px var(--st-warn)'}></span>
+          <span>${sseOk ? 'SSE 已连' : 'SSE 断开'}</span>
+        </div>
+        <span>rate <span class="mono" style="color:var(--t1)">${health.event_rate.toFixed(2)}/s</span></span>
+        <span>mem <span class="mono" style="color:var(--t1)">${health.mem_mb.toFixed(0)}MB</span></span>
       </div>
     </header>
   `;
@@ -85,18 +89,19 @@ function StatusBar() {
   const health = useStore($health);
   const kpis = useStore($kpis);
   const events = useStore($events);
+  const sseOk = useStore($sseConnected);
   return html`
     <footer class="statusbar">
-      <div class="item"><span class="lbl">events:</span><span class="val">${fmtNum(kpis.events_total)}</span></div>
-      <div class="item"><span class="lbl">24h:</span><span class="val">${fmtNum(kpis.events_24h)}</span></div>
-      <div class="item"><span class="lbl">ingest_lag:</span><span class=${'val ' + (health.ingest_lag_ms < 500 ? 'ok' : 'warn')}>${health.ingest_lag_ms.toFixed(0)}ms</span></div>
-      <div class="item"><span class="lbl">db:</span><span class="val">${health.db_size_mb.toFixed(1)}MB</span></div>
-      <div class="item"><span class="lbl">mem:</span><span class="val ok">${health.mem_mb}MB</span></div>
-      <div class="item"><span class="lbl">cpu_idle:</span><span class="val ok">${(health.cpu_idle*100).toFixed(0)}%</span></div>
-      <div class="item"><span class="lbl">workers:</span><span class="val ok">4/4 ●</span></div>
+      <div class="item"><span class="lbl">sessions:</span><span class="val">${health.sessions || 0}</span></div>
+      <div class="item"><span class="lbl">tasks:</span><span class="val">${fmtNum(health.tasks || 0)}</span></div>
+      <div class="item"><span class="lbl">jsonl:</span><span class="val">${health.db_size_mb.toFixed(2)}MB</span></div>
+      <div class="item"><span class="lbl">mem:</span><span class="val ok">${health.mem_mb.toFixed(0)}MB</span></div>
+      <div class="item"><span class="lbl">rate:</span><span class="val ok">${health.event_rate.toFixed(2)}/s</span></div>
+      <div class="item"><span class="lbl">skills:</span><span class="val">${health.skills_count || kpis.active_skill_count || 0}</span></div>
+      <div class="item"><span class="lbl">sse:</span><span class=${'val ' + (sseOk ? 'ok' : 'warn')}>${sseOk ? '●' : '○'}</span></div>
       <div class="spacer"></div>
       <div class="item"><span class="lbl">last_event:</span><span class="val mono">${events[0] ? new Date(events[0].ts_ms).toLocaleTimeString('zh-CN', {hour12:false}) : '—'}</span></div>
-      <div class="item"><span class="lbl">build:</span><span class="val">2026-05-03 a9c721d</span></div>
+      <div class="item"><span class="lbl">uptime:</span><span class="val mono">${health.uptime_s > 3600 ? (health.uptime_s/3600).toFixed(1)+'h' : health.uptime_s > 60 ? Math.floor(health.uptime_s/60)+'m' : (health.uptime_s||0)+'s'}</span></div>
     </footer>
   `;
 }
@@ -174,7 +179,12 @@ function SkillDrawer() {
 
   const skill = skills.find(s => s.id === skillId);
   const recent = events.filter(e => e.skill_id === skillId).slice(0, 8);
-  const related = skillId ? findings.filter(f => f.body.includes(skillId) || f.title.includes(skillId.split('-')[0])) : [];
+  const related = skillId ? findings.filter(f =>
+    (f.body && f.body.includes(skillId)) || (f.title && f.title.includes(skillId.split('-')[0]))
+  ) : [];
+
+  const passColor = !skill ? '' : skill.pass < 0.5 ? 'var(--st-error)' : skill.pass < 0.8 ? 'var(--st-warn)' : 'var(--st-live)';
+  const stateColor = !skill ? '' : skill.state === 'running' ? 'var(--st-live)' : skill.state === 'error' ? 'var(--st-error)' : 'var(--t3)';
 
   return html`
     <div class=${'drawer-overlay' + (skill ? ' open' : '')} onClick=${() => $drawerSkill.set(null)}></div>
@@ -190,48 +200,71 @@ function SkillDrawer() {
         <div class="drawer-body">
           <div class="drawer-section">
             <div class="kpi-grid" style="grid-template-columns:repeat(3,1fr); gap:10px">
-              <div class="kpi sub" style="background:var(--bg-sub); padding:14px"><div class="lbl">RUNS</div><div class="val" style="font-size:24px">${skill.freq}</div></div>
-              <div class="kpi sub" style="background:var(--bg-sub); padding:14px"><div class="lbl">PASS</div><div class="val" style="font-size:24px; color:${skill.pass<0.7?'var(--st-error)':skill.pass<0.85?'var(--st-warn)':'var(--st-live)'}">${(skill.pass*100).toFixed(0)}%</div></div>
-              <div class="kpi sub" style="background:var(--bg-sub); padding:14px"><div class="lbl">AVG MS</div><div class="val" style="font-size:24px">${fmtMs(skill.avgMs)}</div></div>
+              <div class="kpi sub" style="background:var(--bg-sub); padding:14px">
+                <div class="lbl">RUNS</div>
+                <div class="val" style="font-size:24px">${skill.freq}</div>
+              </div>
+              <div class="kpi sub" style="background:var(--bg-sub); padding:14px">
+                <div class="lbl">PASS</div>
+                <div class="val" style=${'font-size:24px; color:' + passColor}>${(skill.pass * 100).toFixed(0)}%</div>
+              </div>
+              <div class="kpi sub" style="background:var(--bg-sub); padding:14px">
+                <div class="lbl">STATE</div>
+                <div class="val" style=${'font-size:18px; color:' + stateColor}>${skill.state}</div>
+              </div>
             </div>
+            ${skill.last_run_summary ? html`
+              <div class="text-xs muted" style="margin-top:10px; padding:8px; background:var(--bg-sub); border-radius:4px; line-height:1.5">
+                ${skill.last_run_summary}
+              </div>
+            ` : ''}
           </div>
 
           <div class="drawer-section">
-            <h4>最近调用 · ${recent.length}</h4>
-            <table class="data">
-              <tbody>
-                ${recent.map(e => html`
-                  <tr><td class="mono text-xs muted">${new Date(e.ts_ms).toLocaleTimeString('zh-CN', {hour12:false})}</td>
-                      <td class="mono text-xs">${e.type}</td>
-                      <td>${e.payload.status === 'failed' ? html`<${Tag} kind="err">failed<//>` : html`<${Tag} kind="live">ok<//>`}</td>
-                      <td class="text-xs muted">${e.payload.duration_ms ? fmtMs(e.payload.duration_ms) : ''}</td></tr>
-                `)}
-              </tbody>
-            </table>
+            <h4>本次任务中的事件 · ${recent.length}</h4>
+            ${recent.length === 0
+              ? html`<div class="muted text-sm">当前任务中尚未出现此 skill 的事件</div>`
+              : html`
+                <table class="data">
+                  <tbody>
+                    ${recent.map(e => html`
+                      <tr>
+                        <td class="mono text-xs muted">${new Date(e.ts_ms).toLocaleTimeString('zh-CN', {hour12:false})}</td>
+                        <td class="mono text-xs">${e.type}</td>
+                        <td>${e.payload.status === 'failed' ? html`<${Tag} kind="err">failed<//>` : html`<${Tag} kind="live">ok<//>`}</td>
+                        <td class="text-xs muted">${e.payload.tool ? 'tool=' + e.payload.tool : ''}</td>
+                      </tr>
+                    `)}
+                  </tbody>
+                </table>
+              `}
           </div>
 
           <div class="drawer-section">
             <h4>关联 findings</h4>
-            ${related.length === 0 ? html`<div class="muted text-sm">无</div>` : related.map(f => html`
+            ${related.length === 0 ? html`<div class="muted text-sm">无关联 finding</div>` : related.map(f => html`
               <div style="padding:10px; background:var(--bg-sub); border-radius:6px; margin-bottom:6px">
-                <div class="flex gap-2"><span class="mono accent" style="color:var(--accent); font-size:11px">${f.id}</span><span class="text-sm" style="color:var(--t1)">${f.title}</span></div>
-                <div class="text-xs muted" style="margin-top:4px">${f.body}</div>
+                <div class="flex gap-2">
+                  <span class="mono" style="color:var(--accent); font-size:11px">${f.id}</span>
+                  <span class="text-sm" style="color:var(--t1)">${f.title}</span>
+                </div>
+                <div class="text-xs muted" style="margin-top:4px">${(f.body || '').slice(0, 120)}${f.body && f.body.length > 120 ? '…' : ''}</div>
               </div>
             `)}
           </div>
 
           <div class="drawer-section">
-            <h4>USER FEEDBACK · 最近 5</h4>
-            <div class="flex gap-2">
-              ${[1,1,-1,1,0].map(f => html`<span style=${'width:32px; height:32px; display:inline-flex; align-items:center; justify-content:center; border-radius:6px; background:var(--bg-sub); font-size:14px'}>${f===1?'👍':f===-1?'👎':'·'}</span>`)}
-            </div>
-          </div>
-
-          <div class="drawer-section">
             <h4>命令</h4>
             <div class="action-card">
-              <div class="cmd"><span style="color:var(--t3)">$</span><span>tail -n 100 logs/${skill.id}.log</span><span class="copy" onClick=${() => navigator.clipboard?.writeText('tail -n 100 logs/'+skill.id+'.log')}>复制</span></div>
+              <div class="cmd">
+                <span style="color:var(--t3)">$</span>
+                <span>node skills/${skill.id}/run.cjs</span>
+                <span class="copy" onClick=${() => { navigator.clipboard?.writeText('node skills/' + skill.id + '/run.cjs'); }}>复制</span>
+              </div>
             </div>
+            ${skill.last_run_ts ? html`
+              <div class="text-xs muted" style="margin-top:6px">最后运行: ${skill.last_run_ts}</div>
+            ` : ''}
           </div>
         </div>
       `}
