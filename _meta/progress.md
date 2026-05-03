@@ -8,7 +8,7 @@
 
 ### 会话 27：v0.7.0 — meta-audit + 4 维评分 + dashboard session-grouped 历史 + 21 项一次性升级
 
-- 🧠 **触发**：Alex 看到论文《Organizational Mirroring》(Yongxun Jin 2026-3 预印本) → 问"项目还能怎么升？"→ 我给 Tier1+2+3 八条建议 → Alex 选 "A 全部做" 起手；中途 3 次 scope 扩展（dashboard 数据源调查 / per-agent 可视化 / per-session 分类+历史）→ 共 21 项
+- 🧠 **触发**：Alex 看了一篇关于多 agent 组织建模的研究 → 问"项目还能怎么升？"→ 我给 Tier1+2+3 八条建议 → Alex 选 "A 全部做" 起手；中途 3 次 scope 扩展（dashboard 数据源调查 / per-agent 可视化 / per-session 分类+历史）→ 共 21 项
 - 🛠 **执行**：mode-router 细判 score=6 → team/subagent fan_out=3；3 worker 零文件冲突并行 + 2 次 SendMessage 续作 Worker A；总 helix run id `2026-5-4-001715`，22 文件改动 + 8 新建（3631+ / 823-）
 - 🔴 **Tier 1 — 核心契约升级（Worker B 主导）**：
   - **B1 meta-audit phase**：新建 `skills/meta-audit/{run.cjs,SKILL.md}`（331 行），插在 a6 之后、finalize 之前；输出 4 维评分（correctness/security/maintainability/alignment_with_plan，0-5）+ findings；helix PHASES_DEFAULT 加 meta-audit；finalize 软兼容（旧 run 无 meta-audit 不卡）

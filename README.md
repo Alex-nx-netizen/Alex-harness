@@ -1,6 +1,6 @@
 # Alex-harness
 
-> Alex 的私人 SDLC Agent Harness —— 基于 OpenAI Harness Engineering 三部曲 + 元思想 + 论文 *Organizational Mirroring*，让 Claude 在编程协作中更可控、可观测、可自我进化。
+> Alex 的私人 SDLC Agent Harness —— 基于 OpenAI Harness Engineering 三部曲 + 元思想，让 Claude 在编程协作中更可控、可观测、可自我进化。
 >
 > **当前版本：v0.7.0**（2026-5-4）
 
@@ -8,7 +8,7 @@
 
 ## v0.7 亮点
 
-借鉴 Yongxun Jin 2026-3 论文《Organizational Mirroring》关键洞察 —— **层级 + 评审是大效应（Cohen's d=1.409），单纯并行 agent 是小效应（d=0.342）** —— v0.7 把这条洞落地为机器化契约：
+核心思路 —— **层级 + 独立评审是真正的胜负手，单纯并行 agent 效应有限** —— v0.7 把这条洞落地为机器化契约：
 
 - 🛡 **Embedded meta-audit phase** —— 在 a6 之后、finalize 之前，独立 subagent（code-reviewer + security-reviewer）独立审，输出 `correctness/security/maintainability/alignment_with_plan` 4 维 0-5 分
 - 📊 **a6-validator 4 维评分** —— `accuracy/completeness/actionability/format` 0-5 分；helix-runs.jsonl 自动多带 score 字段，evolution-tracker 长期分析
