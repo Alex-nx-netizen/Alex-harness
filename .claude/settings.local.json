@@ -10,7 +10,9 @@
       "Bash(cp \"E:/ai/study/person/Alex-harness/skills/session-reporter/logs/push-cursor.json\" \"C:/Users/Administrator/.claude/plugins/cache/alex-harness/alex-harness/0.3.0/skills/session-reporter/logs/push-cursor.json\")",
       "Bash(claude mcp *)",
       "Bash(rtk git *)",
-      "Bash(gh release *)"
+      "Bash(gh release *)",
+      "Bash(netstat -ano)",
+      "Bash(findstr :7777)"
     ]
   },
   "hooks": {
