@@ -260,8 +260,8 @@ Alex-harness/
 
 ---
 
-## 贡献
+## 贡献 / 交流
 
-这是 Alex 的**私人 harness**，不接受 PR；但欢迎 fork 改造适配你自己的工作流。
+这是 Alex 的**私人 harness**，但欢迎一起探讨：开 issue 提想法、提 PR、fork 改造适配你自己的工作流，都欢迎。看到合适的设计也会合并进来。
 
-设计文档在 `design/`，铁律 CLAUDE.md，进展在 `_meta/progress.md`。
+设计文档在 `design/`，铁律见 `CLAUDE.md`，进展见 `_meta/progress.md`。
