@@ -6,7 +6,7 @@
 
 ---
 
-## v0.7 亮点（论文 V3 抄作业）
+## v0.7 亮点
 
 借鉴 Yongxun Jin 2026-3 论文《Organizational Mirroring》关键洞察 —— **层级 + 评审是大效应（Cohen's d=1.409），单纯并行 agent 是小效应（d=0.342）** —— v0.7 把这条洞落地为机器化契约：
 
@@ -255,7 +255,7 @@ Alex-harness/
 | M4 | mode-router + session-reporter v0.1 | ✅ 2026-5-1 |
 | **v0.4-v0.5** | a1-a8 业务元 + helix + 5.5 闭环 + dashboard v2 | ✅ 2026-5-1 ~ 5-2 |
 | **v0.6** | mode-router 双阶段路由 + 5.7 100% 精确硬契约 | ✅ 2026-5-3 |
-| **v0.7** 🆕 | 论文 V3 抄作业（meta-audit + 4 维评分 + Manager-Worker + SOUL.md + dashboard sessions view） | ✅ 2026-5-4 |
+| **v0.7** 🆕 | meta-audit + 4 维评分 + Manager-Worker + SOUL.md + dashboard sessions view | ✅ 2026-5-4 |
 | v0.8 | 真实项目验证 + meta-audit 实战 5-10 次 + SOUL.md 沉淀 | 🔲 进行中 |
 
 ---
