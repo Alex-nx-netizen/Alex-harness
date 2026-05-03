@@ -1,11 +1,15 @@
 "use strict";
 // a5-executor/run.cjs — 骨架版
-// passes 判定（v0.6.0）：
+// passes 判定（v0.6.1，兼容二层 manager_worker）：
 //   1. input 含 PlanDoc
 //   2. 用户已确认（confirmed=true）
 //   3. 若 preferred_skills 非空，skills_used 必须覆盖至少 1 项（5.5 闭环：禁止绕过强匹配 skill）
 //   4. 若 mode 给定（来自 5.7 mode-router --fine 输出）：
 //      - mode=team → subagent_run_ids 必须 ≥1 个 ≥4 字符（不允许绕过）
+//        · 若 team_plan.shape=="manager_worker"：此处的 ID 总数 = manager + workers（≥1 即可，
+//          通常 ≥1+fan_out；manager 自己也算一个 subagent run）
+//        · 若 team_plan.shape=="subagent_parallel"：此处的 ID 数应等于 fan_out
+//        · 若 team_plan.shape=="peer_review"：通常 2 个（implementer + reviewer）
 //      - mode=solo → subagent_run_ids 必须为空（防伪派 team）
 // 真正执行（改文件）由 LLM 按 SKILL.md + a8-risk-guard 配合完成。
 
@@ -83,6 +87,12 @@ function main() {
       ? input.mode
       : null;
   const teamType = typeof input.team_type === "string" ? input.team_type : null;
+  // v0.6.1：可选 shape 透传（manager_worker / subagent_parallel / peer_review），仅日志展示
+  const shape =
+    typeof input.shape === "string" &&
+    /^(manager_worker|subagent_parallel|peer_review)$/.test(input.shape)
+      ? input.shape
+      : null;
   const subagentRunIds = Array.isArray(input.subagent_run_ids)
     ? input.subagent_run_ids.filter(
         (s) => typeof s === "string" && s.trim().length >= 4,
@@ -114,7 +124,7 @@ function main() {
 
   const modeBadge = mode
     ? mode === "team"
-      ? `team/${teamType || "?"}[${subagentRunIds.length} agents]`
+      ? `team/${teamType || "?"}${shape ? "[" + shape + "]" : ""}[${subagentRunIds.length} agents]`
       : "solo"
     : "(无 mode 契约)";
 
@@ -156,6 +166,7 @@ function main() {
       },
       mode,
       team_type: teamType,
+      shape,
       subagent_run_ids: subagentRunIds,
       mode_check: {
         passes: modeCheckPasses,

@@ -19,6 +19,14 @@ const PORT = parseInt(process.env.HARNESS_DASHBOARD_PORT || "7777", 10);
 //   2. CLAUDE_PROJECT_DIR    (CC hook 注入；plugin 模式自动有)
 //   3. process.cwd()         (从哪里启动就用哪里)
 //   4. path.resolve(__dirname, "..")  (dashboard 装在 PROJ/dashboard/ 时的 fallback)
+//
+// F-025: 拒绝从 plugin cache 启动 — 与 F-020 同源（plugin cache vs 项目源代码路径错配）
+// 任何 fallback 落到 plugins/cache/ 下都视为反模式，必须强制环境变量。
+function isPluginCachePath(p) {
+  if (!p) return false;
+  return p.includes("\\plugins\\cache\\") || p.includes("/plugins/cache/");
+}
+
 function resolveProjectRoot() {
   const candidates = [
     process.env.HARNESS_PROJECT_ROOT,
@@ -34,11 +42,23 @@ function resolveProjectRoot() {
         fs.existsSync(path.join(c, "skills")) ||
         fs.existsSync(path.join(c, "CLAUDE.md"))
       ) {
+        // F-025 守门：即使匹配到 marker，也拒绝 plugin cache 路径
+        if (isPluginCachePath(c)) continue;
         return c;
       }
     } catch {}
   }
-  return path.resolve(__dirname, "..");
+  // 最终 fallback：__dirname/..
+  const last = path.resolve(__dirname, "..");
+  if (isPluginCachePath(last)) {
+    const msg =
+      "\n[dashboard] ❌ Dashboard 拒绝从 plugin cache 启动 — 必须设置 HARNESS_PROJECT_ROOT 或 CLAUDE_PROJECT_DIR 环境变量指向项目根。\n" +
+      "[dashboard] ❌ Dashboard refuses to boot from plugin cache — set HARNESS_PROJECT_ROOT or CLAUDE_PROJECT_DIR to your project root.\n" +
+      `[dashboard] 当前路径 / current path: ${last}\n`;
+    process.stderr.write(msg);
+    process.exit(1);
+  }
+  return last;
 }
 const ROOT = resolveProjectRoot();
 const META = path.join(ROOT, "_meta");
@@ -235,12 +255,12 @@ function recordEventTime() {
   _eventTimes.push(now);
   // keep only last 60s
   const cutoff = now - 60_000;
-  _eventTimes = _eventTimes.filter(t => t > cutoff);
+  _eventTimes = _eventTimes.filter((t) => t > cutoff);
 }
 function getEventRate() {
   const now = Date.now();
   const cutoff = now - 60_000;
-  const recent = _eventTimes.filter(t => t > cutoff);
+  const recent = _eventTimes.filter((t) => t > cutoff);
   return parseFloat((recent.length / 60).toFixed(2)); // per second
 }
 
@@ -513,6 +533,309 @@ function latestHelixRun() {
   return runs[0] || null;
 }
 
+/* ─────────────────────────────── helix run details ─────────────────────────────── */
+
+// 解析 mode-router-fine 的 summary，抽出 team_plan
+// 形如: "mode-router-fine: team/subagent (score=11, shape=manager_worker)"
+//       "mode-router-fine: team/peer_review (score=3, shape=peer_review)"
+//       "mode-router-fine: solo (score=0)"
+function parseTeamPlanFromSummary(summary) {
+  if (!summary || typeof summary !== "string") return null;
+  const shapeM = summary.match(
+    /shape=(manager_worker|subagent_parallel|peer_review)/,
+  );
+  if (!shapeM) return null;
+  const scoreM = summary.match(/score=(-?\d+)/);
+  const teamTypeM = summary.match(/team\/(\w+)/);
+  return {
+    shape: shapeM[1],
+    score: scoreM ? parseInt(scoreM[1], 10) : null,
+    team_type: teamTypeM ? teamTypeM[1] : null,
+    raw: summary,
+  };
+}
+
+// 把 events 按 helix_phase 字段分组（含时间窗口 fallback）
+// 返回与 phasesMeta 同长度的数组（每元素为该 phase 索引位的 events），允许同名 phase 多次出现
+function bucketEventsToPhases(events, phasesMeta, runStartedAt) {
+  // phasesMeta 已按 ts 升序；构造每个 phase 的 [start, end] 窗口（end 是 phase.ts，start 是上一不同 ts 的 phase.ts 或 runStartedAt）
+  // 注意：多条 phase_report 共享同一 ts（如 mode-router-fine 一次产出多个评分行）时，只第一条拿到时间窗口，后续给空窗口避免双计
+  let prevTs = runStartedAt ? parseTs(runStartedAt) : 0;
+  const phaseWindows = [];
+  const seenEndTs = new Set();
+  for (const p of phasesMeta) {
+    const endTs = parseTs(p.ts);
+    if (seenEndTs.has(endTs)) {
+      // 同 ts 的副本：空窗口
+      phaseWindows.push({ phase: p.phase, startTs: endTs, endTs, empty: true });
+    } else {
+      phaseWindows.push({
+        phase: p.phase,
+        startTs: prevTs,
+        endTs,
+        empty: false,
+      });
+      seenEndTs.add(endTs);
+      prevTs = endTs;
+    }
+  }
+  // 因为 phase_report 是一个个 push 进 buckets 的，有重复 phase key 的情况下 Map.get 返回同一数组 —
+  // 改用基于索引的 buckets 数组
+  const idxBuckets = phaseWindows.map(() => []);
+  // 重置 buckets 为索引版本
+  for (const ev of events) {
+    if (ev.helix_phase) {
+      // 找到第一个匹配的 phase 索引（且非 empty 窗口）
+      const i = phaseWindows.findIndex(
+        (w) => w.phase === ev.helix_phase && !w.empty,
+      );
+      if (i >= 0) {
+        idxBuckets[i].push(ev);
+        continue;
+      }
+    }
+    const evTs = parseTs(ev.ts);
+    if (!evTs) continue;
+    for (let i = 0; i < phaseWindows.length; i++) {
+      const w = phaseWindows[i];
+      if (w.empty) continue;
+      if (evTs > w.startTs && evTs <= w.endTs) {
+        idxBuckets[i].push(ev);
+        break;
+      }
+    }
+  }
+  return idxBuckets;
+}
+
+function summarizeToolInput(tool, input) {
+  if (!input || typeof input !== "object") return null;
+  if (tool === "Bash") {
+    const c = String(input.command || "").slice(0, 80);
+    return c;
+  }
+  if (tool === "Edit" || tool === "Read" || tool === "Write") {
+    const f = input.file_path || input.path || "";
+    return path.basename(f) || f;
+  }
+  if (tool === "Grep" || tool === "Glob") {
+    return input.pattern || input.query || null;
+  }
+  if (tool === "Task" || tool === "Agent") {
+    return input.subagent_type || input.description || null;
+  }
+  return null;
+}
+
+function getHelixRunDetails(runId) {
+  const helixLines = readJsonl(path.join(META, "helix-runs.jsonl"));
+  let startEv = null,
+    finalizeEv = null;
+  const phaseRows = [];
+  for (const e of helixLines) {
+    if (e.helix_run_id !== runId) continue;
+    if (e.type === "start") startEv = e;
+    else if (e.type === "finalize") finalizeEv = e;
+    else if (e.type === "phase_report") phaseRows.push(e);
+  }
+  if (!startEv && phaseRows.length === 0) return null;
+
+  // 收集本 run 的 events（按 helix_run_id 匹配，再 fallback 按时间窗口）
+  const allEvents = readJsonl(JSONL_PATH);
+  const runEvents = [];
+  let sessionId = null;
+  for (const ev of allEvents) {
+    if (ev.helix_run_id === runId) {
+      runEvents.push(ev);
+      if (!sessionId && ev.session_id) sessionId = ev.session_id;
+    }
+  }
+  // fallback：用 run started_at 时间窗为锚，把没有 helix_run_id 但落入窗内的事件也带入
+  // （只在 runEvents 为空时触发，避免污染）
+  if (runEvents.length === 0 && startEv) {
+    const startMs = parseTs(startEv.ts);
+    const endMs = finalizeEv
+      ? parseTs(finalizeEv.ts)
+      : phaseRows.length > 0
+        ? parseTs(phaseRows[phaseRows.length - 1].ts) + 60_000
+        : startMs + 30 * 60 * 1000;
+    for (const ev of allEvents) {
+      const evMs = parseTs(ev.ts);
+      if (!evMs) continue;
+      if (evMs >= startMs && evMs <= endMs) {
+        runEvents.push(ev);
+        if (!sessionId && ev.session_id) sessionId = ev.session_id;
+      }
+    }
+  }
+
+  // 把 events 按 phase 分桶（phase_report 必须按 ts 升序）
+  const phaseRowsSorted = phaseRows
+    .slice()
+    .sort((a, b) => parseTs(a.ts) - parseTs(b.ts));
+  const buckets = bucketEventsToPhases(runEvents, phaseRowsSorted, startEv?.ts);
+
+  // 拼装 phases
+  let prevTs = startEv?.ts || (phaseRowsSorted[0]?.ts ?? null);
+  const phases = [];
+  let team_plan = null;
+  for (let pi = 0; pi < phaseRowsSorted.length; pi++) {
+    const p = phaseRowsSorted[pi];
+    const evs = buckets[pi] || [];
+    const evView = evs.map((e) => ({
+      ts: e.ts,
+      tool_name: e.tool_name || e.hook_event || null,
+      tool_input_summary: summarizeToolInput(e.tool_name, e.tool_input),
+      hook_event: e.hook_event,
+      is_error: !!e.is_error,
+      skill: e.skill || null,
+      subagent_type: e.subagent_type || null,
+    }));
+    phases.push({
+      phase: p.phase,
+      started_at: prevTs,
+      ended_at: p.ts,
+      duration_ms:
+        typeof p.duration_ms === "number"
+          ? p.duration_ms
+          : parseTs(p.ts) - parseTs(prevTs || p.ts),
+      passes: !!p.passes,
+      summary: p.summary || "",
+      errors: Array.isArray(p.errors) ? p.errors : [],
+      score: p.score || null,
+      events_count: evView.length,
+      events: evView,
+    });
+    prevTs = p.ts;
+
+    // mode-router-fine: 提取 team_plan（取第一个含 shape 的）
+    if (p.phase === "mode-router-fine" && !team_plan) {
+      const tp = parseTeamPlanFromSummary(p.summary);
+      if (tp) team_plan = tp;
+    }
+  }
+
+  return {
+    helix_run_id: runId,
+    task: startEv?.task || "",
+    started_at: startEv?.ts || (phaseRowsSorted[0]?.ts ?? null),
+    finalized_at: finalizeEv?.ts || null,
+    promise: finalizeEv?.promise || null,
+    status: finalizeEv?.status || (phases.length ? "running" : "unknown"),
+    phases_planned: startEv?.phases_planned || [],
+    session_id: sessionId,
+    phases,
+    team_plan,
+  };
+}
+
+/* ─────────────────────────────── session timeline ─────────────────────────────── */
+
+// 给定 session_id，返回完整时间线：helix_runs 数组 + loose_events + tool_usage 统计
+// 设计目标：让 dashboard 按 Claude 会话维度回看历史
+function getSessionTimeline(sessionId) {
+  const s = sessions.get(sessionId);
+  if (!s) return null;
+
+  // 该 session 涉及的所有 events（来自 task.events 聚合 — 比扫盘更快）
+  const sessionEvents = [];
+  for (const tid of s.task_ids) {
+    const t = tasks.get(tid);
+    if (!t) continue;
+    for (const ev of t.events) sessionEvents.push(ev);
+  }
+
+  // 工具使用统计（PostToolUse 算一次）
+  const toolUsage = {};
+  for (const ev of sessionEvents) {
+    if (ev.hook_event === "PostToolUse" && ev.tool_name) {
+      toolUsage[ev.tool_name] = (toolUsage[ev.tool_name] || 0) + 1;
+    }
+  }
+
+  // 找到这个 session 涉及的 helix_run_id 集合
+  const helixRunIds = new Set();
+  for (const ev of sessionEvents) {
+    if (ev.helix_run_id) helixRunIds.add(ev.helix_run_id);
+  }
+  // 备用：扫 helix-runs.jsonl 找 session_id 匹配（虽然 helix-runs 没直接存 sid，但启动事件可能落在 session 内）
+  // 简化：只用上面 events 里的 helix_run_id
+
+  // 构造 helix_runs 摘要（按 started_at 升序）
+  const helixRuns = [];
+  for (const rid of helixRunIds) {
+    const details = getHelixRunDetails(rid);
+    if (!details) continue;
+    // 抽取 task_summary：优先 a1-task-understander 的 summary，其次首个 phase summary
+    let taskSummary = "";
+    const a1 = (details.phases || []).find(
+      (p) => p.phase === "a1-task-understander",
+    );
+    if (a1 && a1.summary) {
+      taskSummary = a1.summary;
+    } else if (details.phases && details.phases.length > 0) {
+      taskSummary = details.phases[0].summary || "";
+    }
+    if (!taskSummary) taskSummary = details.task || "";
+
+    const phasesDone = (details.phases || []).filter(
+      (p) => p.passes !== false,
+    ).length;
+    const phasesTotal =
+      (details.phases_planned || []).length || (details.phases || []).length;
+
+    helixRuns.push({
+      helix_run_id: details.helix_run_id,
+      started_at: details.started_at,
+      finalized_at: details.finalized_at,
+      promise: details.promise,
+      status: details.status,
+      phases_done: phasesDone,
+      phases_total: phasesTotal,
+      task_summary: (taskSummary || "").slice(0, 160),
+      team_plan: details.team_plan,
+    });
+  }
+  helixRuns.sort((a, b) => parseTs(a.started_at) - parseTs(b.started_at));
+
+  // loose_events: events 里 helix_run_id 为空的（不属于任何 helix run）
+  // 体积控制：只回 80 条最近 + 简化字段
+  const looseAll = sessionEvents
+    .filter((ev) => !ev.helix_run_id)
+    .sort((a, b) => parseTs(b.ts) - parseTs(a.ts));
+  const looseEvents = looseAll.slice(0, 80).map((ev) => ({
+    ts: ev.ts,
+    tool_name: ev.tool_name || ev.hook_event || null,
+    hook_event: ev.hook_event || null,
+    tool_input_summary: summarizeToolInput(ev.tool_name, ev.tool_input),
+    skill: ev.skill || null,
+    is_error: !!ev.is_error,
+  }));
+
+  const startedMs = parseTs(s.started_at);
+  const endedMs = parseTs(s.last_event_at);
+  const durationMinutes = Math.max(
+    0,
+    Math.round((endedMs - startedMs) / 60000),
+  );
+
+  return {
+    session_id: s.id,
+    short_id: s.id.slice(0, 8),
+    started_at: s.started_at,
+    ended_at: s.status === "ended" ? s.last_event_at : null,
+    last_event_at: s.last_event_at,
+    duration_minutes: durationMinutes,
+    status: s.status,
+    task_count: s.task_ids.length,
+    event_count: sessionEvents.length,
+    tool_usage: toolUsage,
+    helix_runs: helixRuns,
+    loose_events: looseEvents,
+    loose_events_total: looseAll.length,
+  };
+}
+
 /* ─────────────────────────────── evolution data ─────────────────────────────── */
 
 function readProgressEntries(limit = 60) {
@@ -629,9 +952,76 @@ function getEvolution() {
   };
 }
 
+// v0.7.1: 14 天 × 24 小时 调用密度热力图
+// 数据源：所有 sessions 的 task.events（PostToolUse 类即视为「调用」）
+// 返回：{cells:[336]，days:[14 字符串], hours:[24], max:N}
+function getHeatmap14d() {
+  const now = new Date();
+  const bjNow = new Date(now.getTime() + 8 * 3600 * 1000);
+  // 北京 day boundary 用 UTC 方法读
+  const todayY = bjNow.getUTCFullYear();
+  const todayM = bjNow.getUTCMonth();
+  const todayD = bjNow.getUTCDate();
+  const todayMs = Date.UTC(todayY, todayM, todayD); // 今天 00:00 北京 (作为 UTC ms 的代理)
+  const startMs = todayMs - 13 * 86400 * 1000; // 14 天前 00:00
+
+  const cells = new Array(14 * 24).fill(0); // [day0_h0, day0_h1, ..., day13_h23]
+
+  // 遍历所有 task.events
+  for (const t of tasks.values()) {
+    for (const e of t.events || []) {
+      if (e.hook_event !== "PostToolUse") continue;
+      const ts = parseTs(e.ts); // 已修：减 8h 是真 UTC ms
+      // 把 ts 转回北京 wall-clock 来取 day/hour
+      const bjMs = ts + 8 * 3600 * 1000;
+      const bjDate = new Date(bjMs);
+      const eY = bjDate.getUTCFullYear();
+      const eM = bjDate.getUTCMonth();
+      const eD = bjDate.getUTCDate();
+      const eH = bjDate.getUTCHours();
+      const eDayMs = Date.UTC(eY, eM, eD);
+      const dayIdx = Math.floor((eDayMs - startMs) / 86400000);
+      if (dayIdx < 0 || dayIdx >= 14) continue;
+      cells[dayIdx * 24 + eH]++;
+    }
+  }
+
+  const max = cells.reduce((m, v) => Math.max(m, v), 0);
+  const days = [];
+  for (let i = 0; i < 14; i++) {
+    const d = new Date(startMs + i * 86400 * 1000);
+    days.push(`${d.getUTCMonth() + 1}-${d.getUTCDate()}`);
+  }
+  const hours = Array.from({ length: 24 }, (_, h) => h);
+  return { cells, max, days, hours };
+}
+
 /* ─────────────────────────────── REST views ─────────────────────────────── */
 
 function viewSession(s) {
+  // v0.7.1: helix run 识别用「事件含 helix_run_id」最稳，label 匹配只是兜底
+  // （label 可能是 /helix、/alex-harness:helix、ecc:harness 等多种前缀）
+  const isHelixTask = (t) => {
+    if (!t) return false;
+    if (
+      t.label &&
+      (t.label.startsWith("/helix") ||
+        t.label.includes(":helix") ||
+        t.label.includes("helix"))
+    ) {
+      return true;
+    }
+    return (t.events || []).some((e) => e && e.helix_run_id);
+  };
+  // 唯一 helix_run_id 计数（一个 task 可能涉及多个 helix run，但极少；按 task 粒度最稳）
+  const helixRunIds = new Set();
+  for (const tid of s.task_ids) {
+    const t = tasks.get(tid);
+    if (!t) continue;
+    for (const e of t.events || []) {
+      if (e && e.helix_run_id) helixRunIds.add(e.helix_run_id);
+    }
+  }
   return {
     id: s.id,
     started_at: s.started_at,
@@ -639,9 +1029,7 @@ function viewSession(s) {
     status: s.status,
     task_count: s.task_ids.length,
     duration_ms: parseTs(s.last_event_at) - parseTs(s.started_at),
-    helix_runs_in_session: s.task_ids
-      .map((tid) => tasks.get(tid))
-      .filter((t) => t && t.label && t.label.startsWith("/helix")).length,
+    helix_runs_in_session: helixRunIds.size,
     team_tasks: s.task_ids
       .map((tid) => tasks.get(tid))
       .filter((t) => t && t.mode === "team").length,
@@ -846,6 +1234,19 @@ const server = http.createServer((req, res) => {
     if (!t) return sendJson(res, { error: "not found" }, 404);
     return sendJson(res, viewTaskDetail(t));
   }
+  const hm = url.match(/^\/api\/helix\/([^/]+)\/details$/);
+  if (hm) {
+    const details = getHelixRunDetails(hm[1]);
+    if (!details) return sendJson(res, { error: "not found" }, 404);
+    return sendJson(res, details);
+  }
+  const stm = url.match(/^\/api\/sessions\/([^/]+)\/timeline$/);
+  if (stm) {
+    const tl = getSessionTimeline(stm[1]);
+    if (!tl) return sendJson(res, { error: "not found" }, 404);
+    return sendJson(res, tl);
+  }
+  if (url === "/api/heatmap") return sendJson(res, getHeatmap14d());
   if (url === "/api/evolution") return sendJson(res, getEvolution());
   if (url === "/api/skills") return sendJson(res, getSkillsWithState());
   if (url === "/api/intel") {
@@ -857,13 +1258,17 @@ const server = http.createServer((req, res) => {
   if (url === "/api/health") {
     const memUsage = process.memoryUsage();
     let jsonlSize = 0;
-    try { jsonlSize = fs.existsSync(JSONL_PATH) ? fs.statSync(JSONL_PATH).size : 0; } catch {}
+    try {
+      jsonlSize = fs.existsSync(JSONL_PATH) ? fs.statSync(JSONL_PATH).size : 0;
+    } catch {}
     return sendJson(res, {
       ok: true,
       port: PORT,
       sessions: sessions.size,
       tasks: tasks.size,
-      live_sessions: Array.from(sessions.values()).filter(s => s.status === 'live').length,
+      live_sessions: Array.from(sessions.values()).filter(
+        (s) => s.status === "live",
+      ).length,
       sse_clients: clients.size,
       event_rate: getEventRate(),
       events_processed: tailOffset,
@@ -874,8 +1279,18 @@ const server = http.createServer((req, res) => {
       uptime_s: Math.floor(process.uptime()),
       skills_count: getProjectSkillNamesSet().size,
       workers: [
-        { name: 'ingest',  status: 'running', last_beat_ms: Date.now(), payload: { processed: tailOffset } },
-        { name: 'sse',     status: clients.size > 0 ? 'running' : 'idle', last_beat_ms: Date.now(), payload: { clients: clients.size } },
+        {
+          name: "ingest",
+          status: "running",
+          last_beat_ms: Date.now(),
+          payload: { processed: tailOffset },
+        },
+        {
+          name: "sse",
+          status: clients.size > 0 ? "running" : "idle",
+          last_beat_ms: Date.now(),
+          payload: { clients: clients.size },
+        },
       ],
     });
   }
@@ -911,7 +1326,30 @@ server.listen(PORT, "127.0.0.1", () => {
   console.log(
     `[dashboard] sessions=${sessions.size} tasks=${tasks.size} (loaded from disk)`,
   );
+  console.log(`[dashboard] ROOT=${ROOT}`);
 });
+
+// F-025 启动自检：1 秒后检查关键文件是否存在，路径错配时给警告
+setTimeout(() => {
+  try {
+    const liveEventsPath = path.join(META, "live-events.jsonl");
+    const helixRunsPath = path.join(META, "helix-runs.jsonl");
+    const liveExists = fs.existsSync(liveEventsPath);
+    const helixExists = fs.existsSync(helixRunsPath);
+    if (helixExists && !liveExists) {
+      console.warn(
+        `[dashboard] ⚠ 检测到 helix-runs.jsonl 但缺 live-events.jsonl — 路径可能不对 (META=${META})`,
+      );
+    }
+    if (!liveExists && !helixExists) {
+      console.warn(
+        `[dashboard] ⚠ _meta/ 下既无 live-events.jsonl 也无 helix-runs.jsonl — ROOT 可能错配 (ROOT=${ROOT})`,
+      );
+    }
+  } catch (e) {
+    console.warn(`[dashboard] 启动自检异常: ${e.message}`);
+  }
+}, 1000);
 
 process.on("SIGTERM", () => {
   server.close();

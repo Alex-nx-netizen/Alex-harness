@@ -18,7 +18,7 @@
 const fs = require("fs");
 const net = require("net");
 const path = require("path");
-const { spawn } = require("child_process");
+const { spawn, spawnSync } = require("child_process");
 
 const PROJECT_DIR = process.cwd();
 const META_DIR = path.join(PROJECT_DIR, "_meta");
@@ -28,6 +28,7 @@ const PROGRESS_MD = path.join(META_DIR, "progress.md");
 
 // helix 编排默认 phase 顺序（a8 按需 inject，不固定列；a3 retriever 也按需触发）
 // v0.6：mode-router 进主链——0.5 粗判 + 5.7 细判（100% 精确硬契约）
+// v0.7：meta-audit 进主链（Step 9.5，a6 之后、a7 之前）；治理元 PHASES_GOVERNANCE 软约束接入
 const PHASES_DEFAULT = [
   "mode-router-coarse",
   "a1-task-understander",
@@ -36,8 +37,15 @@ const PHASES_DEFAULT = [
   "mode-router-fine",
   "a5-executor",
   "a6-validator",
+  "meta-audit",
   "a7-explainer",
 ];
+
+// v0.7 治理元（默认在主链跑；finalize 时缺失只警告不卡）
+//   evolution-tracker：每次 finalize 前跑一次趋势分析（可缺）
+//   context-curator：每次 finalize 前更新一次 snapshot（可缺）
+// knowledge-curator / session-reporter 不在 PHASES_GOVERNANCE，因为它们在 finalize 后或 Stop hook 触发
+const PHASES_GOVERNANCE = ["evolution-tracker", "context-curator"];
 
 function nowBJ() {
   const bj = new Date(Date.now() + 8 * 3600 * 1000);
@@ -253,12 +261,37 @@ function cmdReport(phase, jsonStr) {
     errors: Array.isArray(payload.errors) ? payload.errors.slice(0, 5) : [],
     ts: nowBJ(),
   };
+  // v0.7 C2：a4-planner 输出的 composedPhases 抓到 state，finalize 时按此判定必跑 phase
+  if (phase === "a4-planner" && payload.output) {
+    const composed =
+      payload.output.composedPhases || payload.output.composed_phases;
+    if (Array.isArray(composed) && composed.length > 0) {
+      state.composedPhases = composed.filter(
+        (p) => typeof p === "string" && p.trim(),
+      );
+      entry.composedPhases = state.composedPhases;
+    }
+  }
+  // v0.7 B2：a6-validator 的 score 字段抓到 phase report，便于 evolution-tracker 长期分析
+  if (phase === "a6-validator" && payload.score) {
+    entry.score = payload.score;
+  }
+  // v0.7 B1：meta-audit 的 score 字段抓到 phase report
+  if (phase === "meta-audit" && payload.output && payload.output.score) {
+    entry.score = payload.output.score;
+  }
   safeAppend(HELIX_RUNS, entry);
   state.phase_reports.push({
     phase,
     passes: entry.passes,
     ts: entry.ts,
   });
+  // v0.7 dashboard 可视化：记录最近完成的 phase + 时间，让 hook 给后续事件打标签
+  state.last_completed_phase = phase;
+  state.last_phase_ts = entry.ts;
+  state.last_phase_passes = entry.passes;
+  state.last_phase_summary = entry.summary;
+  state.last_phase_duration_ms = entry.duration_ms;
   writeState(state);
   console.error(
     `[helix] ✅ ${phase} 已汇报 (passes=${entry.passes}, run=${state.helix_run_id})`,
@@ -277,6 +310,33 @@ function cmdFinalize() {
   const failed = reports.filter((r) => !r.passes).map((r) => r.phase);
   const promise = allPasses ? "COMPLETE" : "NOT_COMPLETE";
 
+  // v0.7 B3：治理元软约束——若 PHASES_GOVERNANCE 没跑过，警告但不卡 promise
+  const phaseSet = new Set(reports.map((r) => r.phase));
+  const governanceMissing = PHASES_GOVERNANCE.filter((p) => !phaseSet.has(p));
+
+  // v0.7 C2：a4-planner composedPhases 决定哪些 phase 必跑
+  // 若 state 有 composedPhases，把缺的 phase 列出来（仅警告级，不卡 promise）
+  const composedPhases = Array.isArray(state.composedPhases)
+    ? state.composedPhases
+    : null;
+  const composedMissing = composedPhases
+    ? composedPhases.filter(
+        (p) => !phaseSet.has(p) && !p.startsWith("mode-router"),
+      )
+    : [];
+
+  const warnings = [];
+  if (governanceMissing.length > 0) {
+    warnings.push(
+      `governance phases not run (soft): ${governanceMissing.join(", ")}`,
+    );
+  }
+  if (composedMissing.length > 0) {
+    warnings.push(
+      `a4 composedPhases missing (soft): ${composedMissing.join(", ")}`,
+    );
+  }
+
   const finalEntry = {
     helix_run_id: state.helix_run_id,
     type: "finalize",
@@ -285,6 +345,10 @@ function cmdFinalize() {
     passes_all: allPasses,
     phases_run: reports.length,
     failed_phases: failed,
+    composedPhases: composedPhases || null,
+    governance_missing: governanceMissing,
+    composed_missing: composedMissing,
+    warnings,
     task: (state.task || "").slice(0, 200),
     started_at: state.started_at,
     finished_at: nowBJ(),
@@ -341,12 +405,201 @@ function cmdStatus() {
   );
 }
 
+// v0.7 E2: --finalize-session
+//   收集本会话的 helix runs（按 last N 或 since timestamp），拼装 markdown 总结，
+//   调 session-reporter 的 --finalize 走干跑。默认不推飞书；--push-feishu 才真推。
+function cmdFinalizeSession(args) {
+  const opts = {
+    last: 5, // 默认拿最近 5 条 run
+    since: null, // ISO-like "2026-5-4" 北京日期
+    pushFeishu: false,
+    dryRun: true,
+  };
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === "--last") {
+      opts.last = parseInt(args[++i], 10) || 5;
+    } else if (a === "--since") {
+      opts.since = args[++i];
+    } else if (a === "--push-feishu") {
+      opts.pushFeishu = true;
+      opts.dryRun = false;
+    } else if (a === "--dry-run") {
+      opts.dryRun = true;
+      opts.pushFeishu = false;
+    }
+  }
+
+  if (!fs.existsSync(HELIX_RUNS)) {
+    console.error(
+      "[helix] _meta/helix-runs.jsonl 不存在，没法 finalize-session",
+    );
+    process.exit(1);
+  }
+
+  const lines = fs
+    .readFileSync(HELIX_RUNS, "utf-8")
+    .split(/\r?\n/)
+    .filter(Boolean);
+  // 解析每行 + 按 helix_run_id 分组
+  const runs = new Map(); // run_id → { start, finalize, phases[] }
+  for (const ln of lines) {
+    let obj;
+    try {
+      obj = JSON.parse(ln);
+    } catch {
+      continue;
+    }
+    const id = obj.helix_run_id;
+    if (!id) continue;
+    if (!runs.has(id)) {
+      runs.set(id, { id, start: null, finalize: null, phases: [] });
+    }
+    const r = runs.get(id);
+    if (obj.type === "start") r.start = obj;
+    else if (obj.type === "finalize") r.finalize = obj;
+    else if (obj.type === "phase_report") r.phases.push(obj);
+  }
+
+  // 过滤 + 排序：finalize 完成的优先，按 finished_at 倒序
+  let arr = [...runs.values()].filter((r) => r.start || r.finalize);
+  if (opts.since) {
+    arr = arr.filter((r) => {
+      const ts =
+        (r.finalize && r.finalize.finished_at) || (r.start && r.start.ts) || "";
+      return ts >= opts.since;
+    });
+  }
+  arr.sort((a, b) => {
+    const ta =
+      (a.finalize && a.finalize.finished_at) || (a.start && a.start.ts) || "";
+    const tb =
+      (b.finalize && b.finalize.finished_at) || (b.start && b.start.ts) || "";
+    return tb.localeCompare(ta);
+  });
+  arr = arr.slice(0, opts.last);
+
+  // 拼装 markdown 总结
+  const mdLines = [];
+  mdLines.push(`# Helix Session 总结 · 生成于 ${nowBJ()}`);
+  mdLines.push("");
+  mdLines.push(
+    `本次总结涵盖 ${arr.length} 条 helix run（last=${opts.last}${opts.since ? `, since=${opts.since}` : ""}）。`,
+  );
+  mdLines.push("");
+  let promiseComplete = 0;
+  let promiseNotComplete = 0;
+  for (const r of arr) {
+    const taskShort = (
+      (r.start && r.start.task) ||
+      (r.finalize && r.finalize.task) ||
+      "(unknown)"
+    ).slice(0, 80);
+    const promise = (r.finalize && r.finalize.promise) || "STILL_RUNNING";
+    if (promise === "COMPLETE") promiseComplete++;
+    else if (promise === "NOT_COMPLETE") promiseNotComplete++;
+    const phaseLine = r.phases
+      .map((p) => `${(p.phase || "").split("-")[0]}${p.passes ? "✅" : "❌"}`)
+      .join(" ");
+    mdLines.push(`## ${r.id} · ${promise}`);
+    mdLines.push(`- task: ${taskShort}`);
+    mdLines.push(`- phases: ${phaseLine || "(none)"}`);
+    if (
+      r.finalize &&
+      r.finalize.failed_phases &&
+      r.finalize.failed_phases.length
+    ) {
+      mdLines.push(`- failed: ${r.finalize.failed_phases.join(", ")}`);
+    }
+    if (r.finalize && r.finalize.warnings && r.finalize.warnings.length) {
+      mdLines.push(`- warnings: ${r.finalize.warnings.join("; ")}`);
+    }
+    mdLines.push("");
+  }
+  mdLines.push("---");
+  mdLines.push(
+    `合计：COMPLETE ${promiseComplete} · NOT_COMPLETE ${promiseNotComplete} · running ${arr.length - promiseComplete - promiseNotComplete}`,
+  );
+  const md = mdLines.join("\n");
+
+  const summaryJson = {
+    generated_at: nowBJ(),
+    runs_total: arr.length,
+    promise_complete: promiseComplete,
+    promise_not_complete: promiseNotComplete,
+    runs_summary: arr.map((r) => ({
+      id: r.id,
+      task: ((r.start && r.start.task) || "").slice(0, 120),
+      promise: (r.finalize && r.finalize.promise) || "STILL_RUNNING",
+      phases_count: r.phases.length,
+      failed_phases: (r.finalize && r.finalize.failed_phases) || [],
+    })),
+    markdown: md,
+    dry_run: opts.dryRun,
+    push_feishu: opts.pushFeishu,
+  };
+
+  // 调 session-reporter --finalize（如果支持）
+  // 注意：仅在 --push-feishu 显式开启时才真调，否则 dry-run 默认绝不触发飞书副作用
+  // TODO(worker-c): session-reporter 暂不识别 --finalize 子命令（会落到 default 真推飞书的危险路径）；
+  //   等 worker-c 在 session-reporter/run.cjs 里加 if (args[0] === '--finalize') 分支再启用真调用
+  const reporterPath = path.join(
+    PROJECT_DIR,
+    "skills",
+    "session-reporter",
+    "run.cjs",
+  );
+  let reporterResult = null;
+  if (opts.pushFeishu && fs.existsSync(reporterPath)) {
+    const r = spawnSync(
+      "node",
+      [reporterPath, "--finalize", JSON.stringify(summaryJson)],
+      {
+        encoding: "utf-8",
+        cwd: PROJECT_DIR,
+        timeout: 20000,
+      },
+    );
+    reporterResult = {
+      stdout: (r.stdout || "").slice(0, 500),
+      stderr: (r.stderr || "").slice(0, 500),
+      status: r.status,
+      note:
+        r.status === 0
+          ? "session-reporter --finalize 调用成功"
+          : "session-reporter 不识别 --finalize（worker-c 后续在 session-reporter 里加 --finalize 分支）",
+    };
+  } else {
+    reporterResult = {
+      skipped: true,
+      reason: opts.pushFeishu
+        ? "session-reporter run.cjs 不存在"
+        : "dry-run 模式（未带 --push-feishu），不调 session-reporter，避免触发飞书副作用",
+    };
+  }
+
+  // 输出（dry-run 默认）
+  const out = {
+    ok: true,
+    summary: summaryJson,
+    reporter: reporterResult,
+    feishu_pushed: opts.pushFeishu,
+    note: opts.pushFeishu
+      ? "已尝试推飞书（具体由 session-reporter 控制）"
+      : "dry-run 模式，未推飞书；要推请加 --push-feishu",
+  };
+  console.log(JSON.stringify(out, null, 2));
+}
+
 function usage() {
   console.error("Usage:");
   console.error('  node skills/helix/run.cjs --start "<task description>"');
   console.error("  node skills/helix/run.cjs --report <phase> <json>");
   console.error("  node skills/helix/run.cjs --finalize");
   console.error("  node skills/helix/run.cjs --status");
+  console.error(
+    "  node skills/helix/run.cjs --finalize-session [--last N] [--since YYYY-M-D] [--push-feishu]",
+  );
 }
 
 async function main() {
@@ -358,6 +611,8 @@ async function main() {
     cmdReport(args[1], args[2] || "{}");
   } else if (sub === "--finalize") {
     cmdFinalize();
+  } else if (sub === "--finalize-session") {
+    cmdFinalizeSession(args.slice(1));
   } else if (sub === "--status") {
     cmdStatus();
   } else {

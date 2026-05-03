@@ -1,18 +1,39 @@
 #!/usr/bin/env node
 // evolution-tracker entry point
-// Usage: node run.cjs <subject_skill_name> [--phase=1|2|3|4|all]
+// Usage:
+//   node run.cjs <subject_skill_name> [--phase=1|2|3|4|all]
+//   node run.cjs --promote-soul [--dry-run | --apply] [--min-refs=N]
+//     高频议案沉淀到 _meta/SOUL.md（论文 §6③ 简化版；默认 dry-run）
+const fs = require("fs");
 const path = require("path");
 const C = require("./lib/common.cjs");
 const { readPhase1, formatPhase1Log } = require("./lib/phase1_read.cjs");
 const { analyze, formatPhase2Log } = require("./lib/phase2_analyze.cjs");
 const { propose, formatPhase3Log } = require("./lib/phase3_propose.cjs");
 const { write } = require("./lib/phase4_write.cjs");
+const { promoteToSoul } = require("./lib/promote_soul.cjs");
 
 function parseArgs(argv) {
-  const args = { subject: null, phase: "all" };
+  const args = {
+    subject: null,
+    phase: "all",
+    promoteSoul: false,
+    apply: false,
+    dryRun: true,
+    minRefs: 3,
+  };
   for (let i = 2; i < argv.length; i++) {
     const a = argv[i];
-    if (a.startsWith("--phase=")) args.phase = a.slice(8);
+    if (a === "--promote-soul") args.promoteSoul = true;
+    else if (a === "--apply") {
+      args.apply = true;
+      args.dryRun = false;
+    } else if (a === "--dry-run") {
+      args.apply = false;
+      args.dryRun = true;
+    } else if (a.startsWith("--min-refs=")) {
+      args.minRefs = Math.max(1, parseInt(a.slice(11), 10) || 3);
+    } else if (a.startsWith("--phase=")) args.phase = a.slice(8);
     else if (!args.subject) args.subject = a;
   }
   return args;
@@ -20,9 +41,40 @@ function parseArgs(argv) {
 
 function main() {
   const args = parseArgs(process.argv);
+
+  // ----- subcommand: --promote-soul -----
+  if (args.promoteSoul) {
+    const r = promoteToSoul({ apply: args.apply, minRefs: args.minRefs });
+    console.log(
+      `[promote-soul] mode=${args.dryRun ? "dry-run" : "apply"}  min-refs=${args.minRefs}`,
+    );
+    console.log(`  proposals scanned:  ${r.scanned}`);
+    console.log(`  approved candidates: ${r.approved}`);
+    console.log(`  high-freq (≥${args.minRefs}): ${r.highFreq.length}`);
+    console.log(`  already in SOUL:    ${r.alreadyIn.length}`);
+    console.log(`  new rules:          ${r.newRules.length}`);
+    if (r.newRules.length > 0) {
+      console.log("");
+      for (const rule of r.newRules) {
+        console.log(`  + ${rule.line}`);
+      }
+    }
+    if (args.dryRun) {
+      console.log(`\n  [dry-run] 未写入 ${r.soulPath}。要落地：`);
+      console.log(
+        `  node skills/evolution-tracker/run.cjs --promote-soul --apply`,
+      );
+    } else if (r.newRules.length > 0) {
+      console.log(`\n  ✅ 已追加 ${r.newRules.length} 条规则到 ${r.soulPath}`);
+    } else {
+      console.log("\n  （无新规则）");
+    }
+    process.exit(0);
+  }
+
   if (!args.subject) {
     console.error(
-      "Usage: node run.cjs <subject_skill_name> [--phase=1|2|3|4|all]",
+      "Usage:\n  node run.cjs <subject_skill_name> [--phase=1|2|3|4|all]\n  node run.cjs --promote-soul [--dry-run | --apply] [--min-refs=N]",
     );
     process.exit(2);
   }

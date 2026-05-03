@@ -4,6 +4,59 @@
 
 ---
 
+## 2026-5-4
+
+### 会话 27：v0.7.0 — 论文 V3 抄作业（meta-audit + 4 维评分） + dashboard session-grouped 历史 + 21 项一次性升级
+
+- 🧠 **触发**：Alex 看到论文《Organizational Mirroring》(Yongxun Jin 2026-3 预印本) → 问"项目还能怎么升？"→ 我给 Tier1+2+3 八条建议 → Alex 选 "A 全部做" 起手；中途 3 次 scope 扩展（dashboard 数据源调查 / per-agent 可视化 / per-session 分类+历史）→ 共 21 项
+- 🛠 **执行**：mode-router 细判 score=6 → team/subagent fan_out=3；3 worker 零文件冲突并行 + 2 次 SendMessage 续作 Worker A；总 helix run id `2026-5-4-001715`，22 文件改动 + 8 新建（3631+ / 823-）
+- 🔴 **Tier 1 — 论文 V3 抄作业（Worker B 主导）**：
+  - **B1 meta-audit phase**：新建 `skills/meta-audit/{run.cjs,SKILL.md}`（331 行），插在 a6 之后、finalize 之前；输出 4 维评分（correctness/security/maintainability/alignment_with_plan，0-5）+ findings；helix PHASES_DEFAULT 加 meta-audit；finalize 软兼容（旧 run 无 meta-audit 不卡）
+  - **B2 a6 4 维评分**：a6-validator 输出从 `{passes:bool}` 升级为含 `score:{accuracy,completeness,actionability,format,total:0-20}`；默认每维 4 分兜底；helix-runs.jsonl 自动多带 score 字段（evolution-tracker 长期分析用）
+  - **B3 接入 4 lonely skill**：helix 加 `PHASES_GOVERNANCE = ["evolution-tracker","context-curator"]`；finalize 时缺这俩 → 软警告不卡 promise；knowledge-curator / session-reporter 留在 finalize-session 阶段触发
+  - **B4 live-events.jsonl 加 helix_run_id**：hooks/dashboard-emit.cjs `readCurrentHelixState()` 读 `_meta/.helix-current-run.json`；同时 main agent 加 `helix_phase` + `helix_phase_ts` 字段（让 dashboard 能按 phase 着色事件）
+- 🟡 **Tier 2 — 结构性升级（Worker B + C）**：
+  - **C1 Manager-Worker 二层**（Worker C）：mode-router score≥6 输出 `shape:"manager_worker"` 含 `agents[0].subordinates[]`；3≤score<6 退化为扁平 `subagent_parallel`；含 review 词 → `peer_review`；mode-router/tests 26/26 通过
+  - **C2 phase 链动态**（Worker B）：a4-planner 加 `composePhasesByType()` 输出 `composedPhases[]`；research/design_consulting 不跑 a5/a6/a7；feature/refactor/bugfix 全 9 phase；helix finalize 检查 composed_missing 软警告
+  - **C3 _meta/SOUL.md**（Worker C）：v0.1 起步骨架 + 边界对照表（CLAUDE.md=不变契约 / memory/=用户偏好 / progress.md=事件日志 / SOUL.md=harness 自学行为规则）；新建 `skills/evolution-tracker/lib/promote_soul.cjs` + 子命令 `--promote-soul --apply --min-refs=N`，幂等、基于 source_proposal_id 去重
+- 🟢 **Tier 3 — 锦上添花（Worker C）**：
+  - **D1 per-phase model tier**：team_plan.agents[*].model = manager(opus) / worker(sonnet) / explainer(haiku)；config.json#model_tiers 配置
+  - **D2 HEARTBEAT cron**：`hooks/cron-heartbeat.cjs` 默认 local-only 写 `_meta/heartbeat.log`；`--push-feishu` flag 才推（避 F-020 重蹈）；永不阻塞（catch + exit 0）
+  - **E3 mode-router config 外置**：新建 `skills/mode-router/config.json` v0.7.0，权重/关键词/阈值全部从 config 读，run.cjs 无硬编码
+- 🛡 **加固层（Worker A）**：
+  - **A1+A2 dashboard 加固**：`resolveProjectRoot()` 检测路径含 `\plugins\cache\` 时 `process.exit(1)` + 中英双语错误；启动 1 秒后自检（live-events.jsonl 缺 + helix-runs.jsonl 在 → warn）
+  - **A3 F-025 finding 入账**：plugin cache 路径 fallback 反模式；与 F-020 同源
+  - **删假文案**：`dashboard/public/src/app.js` L51-53 hardcoded `v2.0.0-rc1 · darwin/arm64 · SQLite 3.45.1 · WAL · 4 workers · 8.2k events/min` 全删，改读 `/api/health` 实时数据；views.js:676 才是真相 `Node stdlib · no SQLite · no external deps`
+  - **UI 字体放大**：base 14→16px / metric 30→34px / page-title 26→30px / card title 15→17px / sidebar 13→14px / 等比放大；侧栏 220→240、状态栏 36→40、drawer 600→660
+  - **E1 helix-runs.jsonl 月度轮转**：`_meta/rotate.cjs` 200 行；`--month YYYY-M`；JSON 双校验 + .bak 备份
+  - **E4 E2E 回归 fixture**：`_meta/e2e-fixtures/{README.md, 01-simple-task.json, replay.cjs}`；replay 选近似 reference run 跑 diff 报告
+- 🎨 **Worker A 续作 1 — per-agent 可视化**：
+  - 新建 `/api/helix/:run_id/details`：返回 helix run 的完整时间线（phases[] 含 ts/duration/passes/score/events_count/events[]，team_plan{shape,agents}，session_id）
+  - HELIX RUNS 卡片改造：可点击展开 phase 时间线 + drawer 显示该 phase 全部 events
+  - 事件流加 `[a4-planner]` 等 phase tag badge；同 helix_run_id 同色
+  - Team 视图：manager_worker / subagent_parallel / peer_review 三态可视化（树状缩进 + emoji）
+  - 修 "session ?"：从 timeline API 抓真实 session_id
+- 📁 **Worker A 续作 2 — Claude session 分类 + 历史**：
+  - 新增 `/api/sessions/:session_id/timeline`：返回 short_id / duration_minutes / event_count / tool_usage{} / helix_runs[] / loose_events[]
+  - 新增 `/sessions` 视图：左 nav `▣ Sessions` 第二项；卡片折叠（短 id mono + LIVE/ended Tag + 统计）；展开 → 工具柱状图 top10 + helix runs 列表 + 散落事件流
+  - Live 视图加面包屑：`当前会话: <short_id> · 查看全部历史 →`
+  - 三段式过滤（全部/今日/本周）+ session_id 实时搜索 + 20s 周期刷新
+  - SessionTimelineCache 懒加载（首次展开才拉）
+- 📊 **mode-router**：本次 helix 跑出 mode=team/subagent fan_out=3；4 subagent_run_ids 全 ≥4 字符通过 5.7 硬契约；preferred_skills 4 选 3 覆盖（ecc:tdd-workflow 显式 bypass）通过 5.5 硬契约
+- ✅ **finalize 真实分数**：a6-validator score=18/20，meta-audit score=17/20（findings 3：lib/common.cjs 老路径 / plugin cache 同步未自动 / Stop hook 仍禁），但 promise=NOT_COMPLETE 因 Worker B 测试时写了 2 条 meta-audit fail 到 active state——真实本次 meta-audit 在 01:40:18 PASS；Ralph 契约不撒谎留底由人审
+- 🚧 **未做 / 遗留**：
+  - `skills/evolution-tracker/lib/common.cjs` PROJECT_ROOT 仍指 rename 前路径（pre-existing bug，promote_soul.cjs 已绕过）
+  - Stop hook 仍禁用（F-020 后），`--finalize-session` dry-run 默认安全
+  - plugin cache 镜像同步靠手动 `cp`，未自动化
+  - meta-audit 当前 0 个生产用例（除 Worker B 测试），需观察实际效果
+- 🧠 **结构性意义**：
+  - 论文「Hierarchy + Review = d=1.409」洞已落地（meta-audit + 4 维评分双层把关）
+  - 「单纯多 agent d=0.342」也兑现（mode-router score≥6 升 manager_worker）
+  - 论文「修订循环 d=0.049 几乎无效」反映在我们的 Ralph 契约——确实不该靠重跑解决问题
+  - dashboard 从单时间线进化为「会话→helix→phase→event」四层钻取，是论文「独立记忆 + 文件系统级隔离」的 UI 镜像
+
+---
+
 ## 2026-5-3
 
 ### 会话 26：v0.6.0 — mode-router 双阶段路由 + 100% 精确硬契约（5.7 闭环）
@@ -720,3 +773,16 @@
 - phases: mode✅ mode✅ a5✅
 - task: 审查 mode-router v0.2 是否真的接进 helix
 - started → finished: 2026-5-3 04:23:26 → 2026-5-3 04:23:31
+
+### /helix run 2026-5-3-184559 · "测试一下dashboard 是否成功，调用这个入口就可以自动启动，如果没有启动就自动启动，如果启动了的话就不管"
+- promise: **NOT_COMPLETE**
+- phases: (none reported)
+- task: 测试一下dashboard 是否成功，调用这个入口就可以自动启动，如果没有启动就自动启动，如果启动了的话就不管
+- started → finished: 2026-5-3 18:45:59 → 2026-5-3 18:47:55
+
+### /helix run 2026-5-4-001715 · "v0.7 大升级：dashboard 加固(resolveProjectRoot 拒绝plugin cache + 启动自检) + F-025 finding "
+- promise: **NOT_COMPLETE**
+- phases: mode✅ a1✅ a2✅ a4✅ mode✅ a8✅ mode✅ mode✅ mode✅ mode✅ a5✅ a5✅ mode✅ mode✅ mode✅ mode✅ mode✅ mode✅ a6✅ a6✅ meta✅ meta❌ meta❌ a4✅ a4✅ a6✅ mode✅ mode✅ mode✅ mode✅ mode✅ mode✅ a5✅ a6✅ meta✅ a7✅
+- failed: meta-audit, meta-audit
+- task: v0.7 大升级：dashboard 加固(resolveProjectRoot 拒绝plugin cache + 启动自检) + F-025 finding + Tier1[meta-audit phase + 4维评分 + 接入4 lonely skill + live-events 加 helix_run_id] + Tier2[Manager-Worker 二层 + phase链动态 + SOUL.md] + Tier3[per-phase model + HEARTBEAT cron] + 4 项独立洞[helix-runs轮转 / --finalize-session / mode-router config / E2E 回归]
+- started → finished: 2026-5-4 00:17:15 → 2026-5-4 01:40:47

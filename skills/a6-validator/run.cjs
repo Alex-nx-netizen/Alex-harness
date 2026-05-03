@@ -8,6 +8,34 @@ const HELIX_RUN = path.join(process.cwd(), "skills", "helix", "run.cjs");
 const RUNS_LOG = path.join(SKILL_DIR, "logs", "runs.jsonl");
 const PHASE = "a6-validator";
 
+// v0.7：4 维评分（参见 SKILL.md §3）。LLM 透传，脚本兜底默认 4 分。
+const SCORE_DIMENSIONS = [
+  "accuracy",
+  "completeness",
+  "actionability",
+  "format",
+];
+const DEFAULT_SCORE_VALUE = 4;
+
+function buildScore(rawScore) {
+  const score = {};
+  let total = 0;
+  for (const d of SCORE_DIMENSIONS) {
+    let v =
+      rawScore &&
+      typeof rawScore[d] === "number" &&
+      Number.isFinite(rawScore[d])
+        ? rawScore[d]
+        : DEFAULT_SCORE_VALUE;
+    if (v < 0) v = 0;
+    if (v > 5) v = 5;
+    score[d] = v;
+    total += v;
+  }
+  score.total = total;
+  return score;
+}
+
 function nowBJ() {
   const bj = new Date(Date.now() + 8 * 3600 * 1000);
   const p = (n) => String(n).padStart(2, "0");
@@ -89,9 +117,23 @@ function reportToHelix(result, root) {
   }
 }
 
+function parseInput() {
+  // a6 v0.7：可选入参 JSON，含 score（4 维 0-5）
+  // 兼容老调用：node run.cjs（无参） → 走默认 4 分
+  const raw = process.argv[2];
+  if (!raw) return {};
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return {};
+  }
+}
+
 function main() {
   const startMs = Date.now();
   const root = process.cwd();
+  const input = parseInput();
+  const score = buildScore(input.score);
   const checks = detect(root);
 
   if (checks.length === 0) {
@@ -100,10 +142,11 @@ function main() {
       passes: true,
       summary:
         "No checks detected (no tsc/eslint/test/cargo/go/python markers)",
-      output: { checks: [], action_required: null },
+      output: { checks: [], action_required: null, score },
       duration_ms: Date.now() - startMs,
       errors: [],
       ts: nowBJ(),
+      score,
       // legacy fields for backward compat with LLM consumers
       passed: true,
       checks: [],
@@ -132,17 +175,19 @@ function main() {
   const report = {
     phase: PHASE,
     passes,
-    summary: `${results.length - failed.length}/${results.length} checks passed`,
+    summary: `${results.length - failed.length}/${results.length} checks passed · score ${score.total}/20`,
     output: {
       checks: results,
       action_required:
         failed.length > 0
           ? `Fix: ${failed.map((f) => f.name).join(", ")}`
           : null,
+      score,
     },
     duration_ms: Date.now() - startMs,
     errors: failed.map((f) => f.name),
     ts: nowBJ(),
+    score,
     // legacy fields
     passed: passes,
     checks: results,

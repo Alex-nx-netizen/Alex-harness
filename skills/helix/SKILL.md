@@ -74,7 +74,8 @@ node skills/helix/run.cjs --start "<用户的任务描述>"
 | 5.7 | `node skills/mode-router/run.cjs --fine '{"task":"...","files_changed_count":N,"steps_count":N}'` （**100% 精确硬契约**，见 §2.7）| 永不跳过 |
 | 7 | **用户确认 plan + mode**（不跳过；Ralph 反对自宣告完成）|
 | 8 | `node skills/a5-executor/run.cjs '{"plan":...,"user_confirmed":true,"preferred_skills":[...],"skills_used":[...],"mode":"<solo\|team>","team_type":"<subagent\|peer_review>","subagent_run_ids":[...]}'` | 仅 research 类任务可跳 |
-| 9 | `node skills/a6-validator/run.cjs` | 仅纯文档任务可跳 |
+| 9 | `node skills/a6-validator/run.cjs '{"score":{...}}'` | 仅纯文档任务可跳 |
+| 9.5 | `node skills/meta-audit/run.cjs '<input-json>'`（**v0.7 新增**：先调 code-reviewer + security-reviewer subagent 拿 4 维评分 + findings，再喂给本脚本）| `composedPhases` 不含或纯文档任务可跳 |
 | 10 | `node skills/a7-explainer/run.cjs` | 无变更可跳 |
 
 ### §2.5 Step 5.5：skill 最优选择（必跑）
@@ -161,6 +162,38 @@ node skills/mode-router/run.cjs --fine '{
 
 **与 v0.5.1 Q1 决议一致**：硬卡，不允许 bypass。撒谎填假 ID 仍能过机器层，但每次 a5/mode-router 决策都进 helix-runs.jsonl 留痕，人审兜底。
 
+### §2.8 Phase 链动态化（v0.7 新增 / 论文 §6⑤）
+
+> **核心**：让 a4-planner 根据任务 type 决定本次该跑哪些 phase，而不是无脑全跑。
+
+a4-planner 输出 `composedPhases:[<phase names>]`，按 `task_card.type` 拼装：
+
+| task_card.type | composedPhases |
+|---|---|
+| `research` | `mode-router-coarse → a1 → a2 → a3` （只认知/检索，不动代码）|
+| `design_consulting` | `mode-router-coarse → a1 → a2 → a4` （纯文档/方案）|
+| `feature` / `refactor` / `bugfix` | 全 phase 链 + meta-audit |
+| 其它/未识别 | 全链（默认安全）|
+
+**helix 行为契约**：
+- helix --report a4-planner 看到 `payload.output.composedPhases` 时，把它存入 state（`.helix-current-run.json`）
+- helix --finalize 时，若 state 含 composedPhases，缺的 phase 进 `composed_missing` 警告，但**不卡 promise**（v0.7 起步软约束）
+- 没 a4 输出（或 type=unknown）→ 自动回退到 PHASES_DEFAULT 全链
+
+**不替 LLM 拍板**：composedPhases 是脚本根据 type 给出的"建议"，LLM 仍可按需手动跑/跳某 phase。passes 判定依据是 **真实跑过的 phase reports**，不是 composedPhases 计划值。
+
+### §2.9 治理元接入（v0.7 新增）
+
+`PHASES_GOVERNANCE = ["evolution-tracker", "context-curator"]` —— 这两个治理元从 v0.7 起进入"软约束"列表：
+
+- **触发时机**：可在 a7-explainer 后、--finalize 前手动跑（暂未自动化）
+- **缺失影响**：finalize 时若没跑过会进 `governance_missing` 警告，但**不卡 promise**
+- **后续演进**：v0.7.1 起可以考虑把"自动 spawn"挂在 finalize 头上
+
+`knowledge-curator` 和 `session-reporter` **不放 PHASES_GOVERNANCE**：
+- knowledge-curator 由用户手动调用（推飞书 doc）
+- session-reporter 由 Stop hook 触发，或由 `helix --finalize-session` 主动调用（见 §8）
+
 ### Step 任意：风险守护（按需 inject）
 
 任何破坏性/不可逆操作前**必须**先跑：
@@ -187,10 +220,11 @@ node skills/helix/run.cjs --finalize
 | a1-task-understander | 任务描述非空 |
 | a2-repo-sensor | 至少识别 1 项（key_file / tech_stack / commit）|
 | a3-retriever | 提供了 keywords 或 scope |
-| a4-planner | TaskCard 含 type + scope + done_criteria（preferred_skills 透传到 output）|
+| a4-planner | TaskCard 含 type + scope + done_criteria（preferred_skills + composedPhases 透传到 output）|
 | mode-router-fine (5.7) | 总是 passes=true（决策本身不失败；不合规通过 a5 卡点暴露）|
 | a5-executor | plan + user_confirmed=true + 5.5 闭环(skills) + 5.7 闭环(mode×subagent_run_ids) 全过|
-| a6-validator | 所有检查通过（或无检查可跑）|
+| a6-validator | 所有检查通过（或无检查可跑）；附带 score 4 维 0-5（不影响 passes）|
+| meta-audit (9.5) | audit_report.dimensions 4 项 0-5 + findings[]；总分 ≥16 → passes=true；10-15 → needs_revision；<10 → 重大问题 |
 | a7-explainer | git status 检测到变更 |
 | a8-risk-guard | LOW 自动通过；HIGH/CRITICAL 必须 user_confirmed=true |
 
@@ -254,16 +288,24 @@ helix（领导，唯一 / 命令）
  ├─ a4-planner              ← phase
  ├─ mode-router (Step 5.7)  ← phase（细判 + 100% 精确硬契约，v0.6 提为主链）
  ├─ a5-executor             ← phase（含 5.5 + 5.7 双闭环卡点）
- ├─ a6-validator            ← phase
+ ├─ a6-validator            ← phase（v0.7 起带 4 维 score）
+ ├─ meta-audit              ← phase（v0.7 新增 Step 9.5：独立审视位 + 4 维 0-5 评分）
  ├─ a7-explainer            ← phase
  ├─ a8-risk-guard           ← phase（按需 inject）
- ├─ context-curator         ← 治理元（待接入 v0.7）
- ├─ knowledge-curator       ← 治理元（待接入 v0.7）
- ├─ evolution-tracker       ← 治理元（待接入 v0.7）
- └─ session-reporter        ← 治理元（Stop hook 跑，待 v0.7 加 helix_run_id 关联）
+ ├─ context-curator         ← 治理元（v0.7 已接入软约束 / PHASES_GOVERNANCE）
+ ├─ knowledge-curator       ← 治理元（v0.7 已接入：用户手动调用 / 推飞书 doc）
+ ├─ evolution-tracker       ← 治理元（v0.7 已接入软约束 / PHASES_GOVERNANCE）
+ └─ session-reporter        ← 治理元（v0.7 已接入：Stop hook + helix --finalize-session 手动总结）
 ```
 
-**待办（v0.7 接入清单）**：context-curator / knowledge-curator / evolution-tracker / session-reporter 这 4 个治理元目前 SKILL.md §7 列着，但 helix/run.cjs 不调用——和 mode-router 升级前是同一种洞。v0.6 已先把 mode-router 接通。
+**v0.7 治理元接入状态（已落地）**：
+
+| 治理元 | 接入方式 | 触发条件 |
+|---|---|---|
+| evolution-tracker | PHASES_GOVERNANCE 软约束 | 可在 a7 后手动跑 `node skills/evolution-tracker/run.cjs <subject>`；finalize 缺失只警告 |
+| context-curator | PHASES_GOVERNANCE 软约束 | 可在 a7 后手动跑 `node skills/context-curator/run.cjs`；finalize 缺失只警告 |
+| knowledge-curator | 用户手动 | 任务完成后由用户决定是否整理为飞书 doc |
+| session-reporter | Stop hook + `helix --finalize-session` | Stop hook 自动跑 / 用户主动调 finalize-session 总结一段时间窗口 |
 
 13 个下属的 SKILL.md 仍存在（提示词层 + LLM 加载），但**它们不再是顶级 / 命令**——`.claude-plugin/plugin.json` 已改为只暴露 `./skills/helix`。
 
@@ -274,4 +316,15 @@ node skills/helix/run.cjs --start "<task>"        # 启动一次 run
 node skills/helix/run.cjs --report <phase> <json> # phase 上报（自动调用，一般不手敲）
 node skills/helix/run.cjs --finalize              # 收尾，生成 promise
 node skills/helix/run.cjs --status                # 查看当前 active run
+
+# v0.7 新增：会话级总结（跨多个 helix run）
+node skills/helix/run.cjs --finalize-session                    # dry-run 默认，输出 markdown 总结
+node skills/helix/run.cjs --finalize-session --last 10          # 总结最近 10 条 run
+node skills/helix/run.cjs --finalize-session --since 2026-5-4   # 总结某日起所有 run
+node skills/helix/run.cjs --finalize-session --push-feishu      # 真推飞书（默认 dry-run，不推）
 ```
+
+`--finalize-session` 行为：
+- 读 `_meta/helix-runs.jsonl`，按 `helix_run_id` 分组拼装 markdown 总结
+- 调 `node skills/session-reporter/run.cjs --finalize <summary-json>`（如 session-reporter 还未支持，会留 stdout note）
+- **dry-run 默认**：不推飞书，只输出到 stdout；用户决定 `--push-feishu` 才真推

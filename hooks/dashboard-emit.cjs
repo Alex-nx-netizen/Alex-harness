@@ -10,8 +10,35 @@ const path = require("path");
 
 const PROJECT_ROOT = process.env.CLAUDE_PROJECT_DIR || process.cwd();
 const JSONL_PATH = path.join(PROJECT_ROOT, "_meta", "live-events.jsonl");
+const HELIX_CURRENT_RUN_PATH = path.join(
+  PROJECT_ROOT,
+  "_meta",
+  ".helix-current-run.json",
+);
 const MAX_TOOL_OUTPUT_BYTES = 2048;
 const MAX_LINE_BYTES = 8192;
+
+// B4 + v0.7 dashboard 可视化：读 _meta/.helix-current-run.json
+// 返回 {helix_run_id, last_completed_phase, last_phase_ts}（任意字段可为 null）
+function readCurrentHelixState() {
+  try {
+    if (!fs.existsSync(HELIX_CURRENT_RUN_PATH)) return {};
+    const obj = JSON.parse(fs.readFileSync(HELIX_CURRENT_RUN_PATH, "utf-8"));
+    if (!obj || typeof obj !== "object") return {};
+    return {
+      helix_run_id:
+        typeof obj.helix_run_id === "string" ? obj.helix_run_id : null,
+      last_completed_phase:
+        typeof obj.last_completed_phase === "string"
+          ? obj.last_completed_phase
+          : null,
+      last_phase_ts:
+        typeof obj.last_phase_ts === "string" ? obj.last_phase_ts : null,
+    };
+  } catch {
+    return {};
+  }
+}
 
 // 北京时间 YYYY-M-D HH:MM:SS（CLAUDE.md §工作约定 #7）
 function bjTime(d = new Date()) {
@@ -53,11 +80,15 @@ function deriveSkill(payload) {
 }
 
 function buildEvent(p) {
+  const helixState = readCurrentHelixState();
   const ev = {
     ts: bjTime(),
     session_id: p.session_id || null,
     hook_event: p.hook_event_name || "unknown",
     cwd: p.cwd || null,
+    helix_run_id: helixState.helix_run_id || null, // B4
+    helix_phase: helixState.last_completed_phase || null, // v0.7: 最近完成的 phase
+    helix_phase_ts: helixState.last_phase_ts || null,
   };
   const he = ev.hook_event;
   if (he === "PostToolUse" || he === "PreToolUse") {

@@ -1,7 +1,7 @@
 {
   "name": "alex-harness",
-  "version": "0.6.0",
-  "description": "Personal SDLC harness — /helix is the only entrypoint, orchestrating a1-a8 phases under a Ralph passes contract. All phase reports converge on _meta/helix-runs.jsonl.",
+  "version": "0.7.0",
+  "description": "Personal SDLC harness — /helix is the only entrypoint, orchestrating a1-a8 + meta-audit phases under a Ralph passes contract. v0.7 adds embedded meta-audit, 4-dim 0-5 scoring, dynamic phase chains, Manager-Worker team plans, SOUL.md long-term memory, and dashboard session-grouped history.",
   "author": {
     "name": "Alex-nx-netizen",
     "url": "https://github.com/Alex-nx-netizen"

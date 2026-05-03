@@ -1,5 +1,5 @@
 "use strict";
-// mode-router/run.cjs v0.2 — 双阶段 solo/team 路由（接入 helix）
+// mode-router/run.cjs v0.3 — 双阶段 solo/team 路由 + Manager-Worker 二层 + per-phase model tier
 //
 // 子命令：
 //   --coarse "<task>"          Step 0.5：基于任务文本粗判（关键词 + 长度 + 跨域）
@@ -7,16 +7,22 @@
 //   --list                     查看最近 10 条路由记录
 //   --log "task" mode ...      手动记录（旧 v0.1 兼容）
 //
-// 决策维度（v0.2 加权评分，threshold ≥3 → team）：
+// 决策维度（v0.3 加权评分，权重外置 config.json）：
 //   显式 "team" 词 → +999（强制 team）
 //   显式 "solo" 词 → -999（强制 solo）
 //   并行词命中 → +2/词（最多 +4）
-//   审查词命中 → +2（peer_review 路由）
+//   审查词命中 → +3（peer_review 路由）
 //   跨前后端域 → +2
 //   任务长度 >150 字 → +1
 //   重构/迁移/upgrade 词 → +1
 //   plan.files_changed > 5 → +2，>10 → +3（fine）
 //   plan.steps > 8 → +1，>15 → +2（fine）
+//
+// v0.3 新增（论文 §6① §6⑧）：
+//   - score ≥ 6 → shape = "manager_worker"（二层结构，论文 Organizational Mirroring）
+//   - 3 ≤ score < 6 → shape = "subagent_parallel"（扁平 fan-out）
+//   - 含 review 词 → shape = "peer_review"
+//   - team_plan.agents[*].model：manager/planner=opus，worker/executor/reviewer=sonnet，explainer/summarizer=haiku
 //
 // 接入 helix：每次 --coarse / --fine 都向 helix --report 上报，进 helix-runs.jsonl
 
@@ -29,51 +35,32 @@ const PROJECT_DIR = process.cwd();
 const ROUTER_LOG = path.join(PROJECT_DIR, "_meta", "mode-router-log.jsonl");
 const RUNS_LOG = path.join(SKILL_DIR, "logs", "runs.jsonl");
 const HELIX_RUN = path.join(PROJECT_DIR, "skills", "helix", "run.cjs");
+const CONFIG_PATH = path.join(SKILL_DIR, "config.json");
 
-// --- signal patterns ---
-const PARALLEL_PATS = [
-  "并行",
-  "前端.*后端",
-  "后端.*前端",
-  "同时做",
-  "同步进行",
-  "拆分",
-  "多模块",
-  "分别做",
-  "parallel",
-];
-const REVIEW_PATS = [
-  "review",
-  "审查",
-  "审核",
-  "一写一审",
-  "code review",
-  "审阅",
-  "独立.*审",
-];
-const SOLO_PATS = ["\\bsolo\\b", "单.*模式", "solo 跑", "单 agent"];
-const TEAM_PATS = ["\\bteam\\b", "team 模式", "团队.*模式", "多 agent"];
-const REFACTOR_PATS = [
-  "重构",
-  "refactor",
-  "迁移",
-  "migration",
-  "upgrade",
-  "升级",
-  "重写",
-];
-const FRONTEND_PATS = [
-  "前端",
-  "frontend",
-  "ui",
-  "react",
-  "vue",
-  "页面",
-  "组件",
-];
-const BACKEND_PATS = ["后端", "backend", "api", "数据库", "database", "server"];
+// --- load externalized config ---
+function loadConfig() {
+  if (!fs.existsSync(CONFIG_PATH)) {
+    throw new Error(`[mode-router] config.json missing at ${CONFIG_PATH}`);
+  }
+  const raw = fs.readFileSync(CONFIG_PATH, "utf-8");
+  let cfg;
+  try {
+    cfg = JSON.parse(raw);
+  } catch (e) {
+    throw new Error(`[mode-router] config.json parse failed: ${e.message}`);
+  }
+  // sanity defaults
+  cfg.thresholds = cfg.thresholds || { team: 3, manager_worker: 6 };
+  cfg.weights = cfg.weights || {};
+  cfg.keywords = cfg.keywords || {};
+  cfg.model_tiers = cfg.model_tiers || {};
+  return cfg;
+}
+
+const CFG = loadConfig();
 
 function matchAll(text, pats) {
+  if (!Array.isArray(pats)) return [];
   return pats.filter((p) => new RegExp(p, "i").test(text));
 }
 
@@ -91,74 +78,80 @@ function nowBJ() {
   );
 }
 
-// --- v0.2 multi-dim scorer ---
+// --- v0.3 multi-dim scorer (config-driven) ---
 function score(taskDesc, planSignals) {
   const text = String(taskDesc || "");
+  const W = CFG.weights;
+  const K = CFG.keywords;
   const breakdown = {};
   let total = 0;
 
-  const soloHits = matchAll(text, SOLO_PATS);
-  const teamHits = matchAll(text, TEAM_PATS);
-  const parallelHits = matchAll(text, PARALLEL_PATS);
-  const reviewHits = matchAll(text, REVIEW_PATS);
-  const refactorHits = matchAll(text, REFACTOR_PATS);
-  const feHits = matchAll(text, FRONTEND_PATS);
-  const beHits = matchAll(text, BACKEND_PATS);
+  const soloHits = matchAll(text, K.solo);
+  const teamHits = matchAll(text, K.team);
+  const parallelHits = matchAll(text, K.parallel);
+  const reviewHits = matchAll(text, K.review);
+  const refactorHits = matchAll(text, K.refactor);
+  const feHits = matchAll(text, K.frontend);
+  const beHits = matchAll(text, K.backend);
 
   if (soloHits.length > 0) {
-    breakdown.solo_explicit = -999;
-    total = -999;
+    breakdown.solo_explicit = W.explicit_solo;
+    total = W.explicit_solo;
   } else if (teamHits.length > 0) {
-    breakdown.team_explicit = 999;
-    total = 999;
+    breakdown.team_explicit = W.explicit_team;
+    total = W.explicit_team;
   } else {
     if (parallelHits.length > 0) {
-      const v = Math.min(parallelHits.length * 2, 4);
+      const v = Math.min(
+        parallelHits.length * (W.parallel_per_hit || 2),
+        W.parallel_max || 4,
+      );
       breakdown.parallel = v;
       total += v;
     }
     if (reviewHits.length > 0) {
-      // review 任务天然适合 peer_review，加权 +3 直接达阈值
-      breakdown.review = 3;
-      total += 3;
+      // review 任务天然适合 peer_review，加权直接达阈值
+      breakdown.review = W.review;
+      total += W.review;
     }
     if (feHits.length > 0 && beHits.length > 0) {
-      breakdown.cross_domain = 2;
-      total += 2;
+      breakdown.cross_domain = W.frontend_backend_cross;
+      total += W.frontend_backend_cross;
     }
     if (text.length > 150) {
-      breakdown.long_task = 1;
-      total += 1;
+      breakdown.long_task = W.long_task;
+      total += W.long_task;
     }
     if (refactorHits.length > 0) {
-      breakdown.refactor = 1;
-      total += 1;
+      breakdown.refactor = W.refactor;
+      total += W.refactor;
     }
     if (planSignals) {
       const files = Number(planSignals.files_changed_count || 0);
       const steps = Number(planSignals.steps_count || 0);
       if (files > 10) {
-        breakdown.files_many = 3;
-        total += 3;
+        breakdown.files_many = W.files_many_15;
+        total += W.files_many_15;
       } else if (files > 5) {
-        breakdown.files_some = 2;
-        total += 2;
+        breakdown.files_some = W.files_many_5;
+        total += W.files_many_5;
       }
       if (steps > 15) {
-        breakdown.steps_many = 2;
-        total += 2;
+        breakdown.steps_many = W.steps_many_15;
+        total += W.steps_many_15;
       } else if (steps > 8) {
-        breakdown.steps_some = 1;
-        total += 1;
+        breakdown.steps_some = W.steps_many_8;
+        total += W.steps_many_8;
       }
     }
   }
 
   let mode, team_type;
+  const teamThreshold = CFG.thresholds.team || 3;
   if (total <= -999) {
     mode = "solo";
     team_type = null;
-  } else if (total >= 999 || total >= 3) {
+  } else if (total >= 999 || total >= teamThreshold) {
     mode = "team";
     team_type =
       reviewHits.length > parallelHits.length ? "peer_review" : "subagent";
@@ -171,7 +164,7 @@ function score(taskDesc, planSignals) {
     mode,
     team_type,
     score: total,
-    threshold: 3,
+    threshold: teamThreshold,
     breakdown,
     signals: {
       solo: soloHits,
@@ -185,12 +178,18 @@ function score(taskDesc, planSignals) {
   };
 }
 
-// v0.2 — 100% 精确执行强化：mode=team 时直接产出 team_plan（具体 Agent 调用清单）
-// + enforcement（硬契约指令），减少 LLM 决策空间
+// v0.3 — Manager-Worker 二层（论文 §6①）
+// shape 决策：
+//   review 词 → "peer_review"（implementer + reviewer 串行）
+//   score ≥ thresholds.manager_worker (默认 6) → "manager_worker"（manager + workers 二层委派）
+//   else → "subagent_parallel"（扁平 fan-out）
 function buildTeamPlan(taskDesc, planSignals, s) {
   if (s.mode !== "team") return null;
   const tt = s.team_type;
   const taskShort = String(taskDesc || "").slice(0, 200);
+  const MT = CFG.model_tiers || {};
+  const mwThreshold = CFG.thresholds.manager_worker || 6;
+
   if (tt === "peer_review") {
     return {
       shape: "peer_review",
@@ -198,31 +197,62 @@ function buildTeamPlan(taskDesc, planSignals, s) {
         {
           role: "implementer",
           subagent_type: "general-purpose",
+          model: MT.executor_role || "sonnet",
           description: "实现任务",
           prompt: `按 plan 实现以下任务（不做 review，只实现）：\n${taskShort}\n\n要求：\n- 严格按 a4 plan 改动文件\n- 每个文件改完输出 ✅\n- 完成后产出"实现摘要"（修改清单 + 设计取舍）`,
         },
         {
           role: "reviewer",
           subagent_type: "ecc:code-reviewer",
+          model: MT.reviewer_role || "sonnet",
           description: "独立 review",
           prompt: `独立 review 上一个 agent 的实现（你看不到他的思路，只看代码 diff + 任务描述）：\n${taskShort}\n\n输出：\n- CRITICAL/HIGH/MEDIUM 问题清单\n- 至少 3 个具体改进建议\n- 通过/不通过判定`,
         },
       ],
     };
   }
-  // subagent (parallel)：基于 plan 信号决定 fan-out 数
+
+  // subagent / manager_worker：基于 score 和 plan 信号决定 shape + fan-out 数
   const fanOut = (() => {
     const f = Number((planSignals && planSignals.files_changed_count) || 0);
     if (f > 10) return 3;
     if (f > 5) return 2;
     return 2;
   })();
+
+  if (s.score >= mwThreshold) {
+    // 二层：manager + N workers as subordinates
+    const workers = Array.from({ length: fanOut }).map((_, i) => ({
+      role: `worker_${i + 1}`,
+      subagent_type: "general-purpose",
+      model: MT.worker_role || "sonnet",
+      description: `manager 分派的 worker ${i + 1}/${fanOut}`,
+      prompt: `你是 manager 分派给你的 worker（编号 ${i + 1}/${fanOut}）。\n任务总览：\n${taskShort}\n\n你只负责 manager 在派发时给你的具体分片（manager 会基于 plan.files_changed 拆分）。\n\n要求：\n- 只改自己分片范围内的文件，不读不改其他分片\n- 改完输出"分片摘要"（修改清单 + 设计取舍）回报给 manager\n- 遇到边界冲突或不确定 → 回 manager 协调，不要私自扩大范围`,
+    }));
+    return {
+      shape: "manager_worker",
+      fan_out: fanOut,
+      agents: [
+        {
+          role: "manager",
+          subagent_type: "general-purpose",
+          model: MT.manager_role || "opus",
+          description: `manager：拆任务给 ${fanOut} 个 worker + 汇总产出`,
+          prompt: `你是这个团队的 manager（论文 Organizational Mirroring 二层委派）。\n任务总览：\n${taskShort}\n\n你的职责：\n1. **拆分**：按 plan.files_changed 把任务切成 ${fanOut} 个互不重叠的分片，每个分片明确：(a) 该分片负责的文件列表 (b) done_criteria (c) 不可碰的边界\n2. **派发**：调 Agent tool 派 ${fanOut} 个 worker（subagent_type 见 subordinates[].subagent_type；prompt 用 subordinates[i].prompt + 你拆好的具体分片）\n3. **汇总**：收集每个 worker 的"分片摘要"，做一致性检查（边界冲突？重复改？遗漏？）\n4. **回报**：产出 manager 摘要 = (a) 各分片完成状态 (b) 跨分片的不一致点和如何裁决 (c) 整体 done_criteria 是否满足\n\n禁止：\n- 自己动手改文件（你只协调；改文件由 worker 干）\n- 信息黑盒：每个 worker 的输入 / 输出都要在你的 manager 摘要里可追溯`,
+          subordinates: workers,
+        },
+      ],
+    };
+  }
+
+  // 扁平：3 ≤ score < manager_worker_threshold
   return {
     shape: "subagent_parallel",
     fan_out: fanOut,
     agents: Array.from({ length: fanOut }).map((_, i) => ({
       role: `worker_${i + 1}`,
       subagent_type: "general-purpose",
+      model: MT.worker_role || "sonnet",
       description: `并行分片 ${i + 1}/${fanOut}`,
       prompt: `你是 ${fanOut} 个并行 worker 之一（编号 ${i + 1}）。任务总览：\n${taskShort}\n\n你负责的分片：[等 LLM 在 0.5/5.7 之后按 plan.files_changed 拆分给你]\n\n要求：\n- 只改自己分片范围内的文件\n- 不读不改其他分片\n- 完成后产出"分片摘要"`,
     })),
@@ -246,13 +276,14 @@ function buildEnforcement(r) {
   // team
   return {
     level: "MUST",
-    directive: `立即按 team/${r.team_type} 模式执行：你必须**调 Agent tool**派 ${r.team_type === "peer_review" ? "2 个" : "≥2 个"} subagent，按 team_plan.agents 的 subagent_type / prompt 配置`,
+    directive: `立即按 team/${r.team_type} 模式执行：你必须**调 Agent tool**派 ${r.team_type === "peer_review" ? "2 个" : "≥2 个"} subagent，按 team_plan.agents 的 subagent_type / prompt / model 配置`,
     steps: [
       "1. 读 mode-router --fine 输出的 team_plan.agents 数组",
-      "2. 对每个 agent 调一次 Agent tool（subagent_type + prompt）",
-      "3. 收集每个 agent 返回的 result（用其内部生成的 ID 或自定义 run_id 标识）",
-      "4. 把 ID 列表填进 a5-executor 入参的 subagent_run_ids[]",
-      "5. team_plan.shape='peer_review' 时必须串行（implementer → reviewer）；'subagent_parallel' 时并行（一个消息多个 Agent 调用）",
+      "2. 检查 team_plan.shape：peer_review / subagent_parallel / manager_worker",
+      "3. 若 shape=manager_worker：先调 1 个 manager Agent，让它再调 N 个 worker（manager.subordinates 数组定义）；最终 subagent_run_ids 含 manager + 所有 worker 的 ID",
+      "4. 若 shape=subagent_parallel：直接对每个 agent 调一次 Agent tool，并行（一个消息多个 Agent 调用）",
+      "5. 若 shape=peer_review：串行（implementer → reviewer）",
+      "6. 把所有返回的 ID 列表填进 a5-executor 入参的 subagent_run_ids[]",
     ],
     forbid: [
       "禁止 solo 跑（mode=team 时若 a5 入参 subagent_run_ids 为空 → passes=false）",
@@ -273,17 +304,24 @@ function reasonFor(s) {
     const reasons = [];
     if (s.breakdown.parallel)
       reasons.push(`并行信号(+${s.breakdown.parallel})`);
-    if (s.breakdown.review) reasons.push(`审查信号(+3)`);
-    if (s.breakdown.cross_domain) reasons.push("跨前后端域(+2)");
-    if (s.breakdown.files_many) reasons.push("plan>10 文件(+3)");
-    if (s.breakdown.files_some) reasons.push("plan>5 文件(+2)");
-    if (s.breakdown.steps_many) reasons.push("plan>15 步(+2)");
-    if (s.breakdown.steps_some) reasons.push("plan>8 步(+1)");
-    if (s.breakdown.long_task) reasons.push("任务长(+1)");
-    if (s.breakdown.refactor) reasons.push("重构/迁移(+1)");
-    return `综合评分 ${s.score} ≥3 触发 team：${reasons.join("、")}`;
+    if (s.breakdown.review) reasons.push(`审查信号(+${s.breakdown.review})`);
+    if (s.breakdown.cross_domain)
+      reasons.push(`跨前后端域(+${s.breakdown.cross_domain})`);
+    if (s.breakdown.files_many)
+      reasons.push(`plan>10 文件(+${s.breakdown.files_many})`);
+    if (s.breakdown.files_some)
+      reasons.push(`plan>5 文件(+${s.breakdown.files_some})`);
+    if (s.breakdown.steps_many)
+      reasons.push(`plan>15 步(+${s.breakdown.steps_many})`);
+    if (s.breakdown.steps_some)
+      reasons.push(`plan>8 步(+${s.breakdown.steps_some})`);
+    if (s.breakdown.long_task)
+      reasons.push(`任务长(+${s.breakdown.long_task})`);
+    if (s.breakdown.refactor)
+      reasons.push(`重构/迁移(+${s.breakdown.refactor})`);
+    return `综合评分 ${s.score} ≥${s.threshold} 触发 team：${reasons.join("、")}`;
   }
-  return `综合评分 ${s.score} <3，默认 solo`;
+  return `综合评分 ${s.score} <${s.threshold}，默认 solo`;
 }
 
 // --- output ---
@@ -296,9 +334,12 @@ function printRecommendation(taskDesc, r, stage) {
       : stage === "fine"
         ? "[Step 5.7 细判]"
         : "";
+  const shape = r.team_plan ? r.team_plan.shape : null;
   const TEAM_FORMS = {
-    subagent:
+    subagent_parallel:
       "派出并行 subagent 分别执行（LLM 必须用 Agent tool 派 + 填 subagent_run_ids）",
+    manager_worker:
+      "二层 Manager-Worker：1 个 manager + N 个 worker（论文 §6①）",
     peer_review: "Agent A 实现 → Agent B 独立 review",
   };
 
@@ -306,13 +347,13 @@ function printRecommendation(taskDesc, r, stage) {
     "",
     `┌─ mode-router ${stageBadge} ────────────────────┐`,
     `│ 任务：${snip}`,
-    `│ 评分：${r.score} (阈值 ${r.threshold})`,
+    `│ 评分：${r.score} (阈值 team≥${r.threshold} / manager_worker≥${CFG.thresholds.manager_worker || 6})`,
     "├────────────────────────────────────────────┤",
     `│ 路由结果：${modeStr}`,
     `│ 原因：${r.reason}`,
   ];
-  if (r.mode === "team" && TEAM_FORMS[r.team_type]) {
-    lines.push(`│ 形式：${TEAM_FORMS[r.team_type]}`);
+  if (r.mode === "team" && shape && TEAM_FORMS[shape]) {
+    lines.push(`│ 形式：${TEAM_FORMS[shape]}`);
   }
   lines.push("└────────────────────────────────────────────┘");
   console.error(lines.join("\n"));
@@ -331,11 +372,12 @@ function reportToHelix(stage, result) {
   const phase = stage === "coarse" ? "mode-router-coarse" : "mode-router-fine";
   const payload = {
     passes: true,
-    summary: `${phase}: ${result.mode}${result.team_type ? "/" + result.team_type : ""} (score=${result.score})`,
+    summary: `${phase}: ${result.mode}${result.team_type ? "/" + result.team_type : ""} (score=${result.score}${result.team_plan ? ", shape=" + result.team_plan.shape : ""})`,
     output: {
       mode: result.mode,
       team_type: result.team_type,
       score: result.score,
+      shape: result.team_plan ? result.team_plan.shape : null,
       reason: result.reason,
     },
     duration_ms: 0,
@@ -354,7 +396,7 @@ function cmdCoarse(taskDesc) {
       mode: "solo",
       team_type: null,
       score: 0,
-      threshold: 3,
+      threshold: CFG.thresholds.team || 3,
       forced: true,
       reason: "非 Claude 模型，team 不可用，强制 solo",
       signals: {},
@@ -428,7 +470,7 @@ function cmdFine(jsonStr) {
       enforcement_level: "MUST",
       a5_passes_requires:
         s.mode === "team"
-          ? "subagent_run_ids 至少 1 个 ≥4 字符"
+          ? "subagent_run_ids 至少 1 个 ≥4 字符（manager + workers 总数）"
           : "subagent_run_ids 必须为空数组",
       bypass_allowed: false,
       finalize_consequence:
@@ -444,6 +486,7 @@ function cmdFine(jsonStr) {
     mode: r.mode,
     team_type: r.team_type,
     score: r.score,
+    shape: r.team_plan ? r.team_plan.shape : null,
     breakdown: r.breakdown,
     reason: r.reason,
     timestamp_ms: Date.now(),
@@ -455,6 +498,7 @@ function cmdFine(jsonStr) {
     mode: r.mode,
     team_type: r.team_type,
     score: r.score,
+    shape: r.team_plan ? r.team_plan.shape : null,
     files_changed_count: planSignals.files_changed_count,
     steps_count: planSignals.steps_count,
     task_snippet: taskDesc.slice(0, 80),
@@ -489,8 +533,9 @@ function showList() {
     const modeStr = (e.mode + (e.team_type ? "/" + e.team_type : "")).padEnd(
       18,
     );
+    const shapeStr = e.shape ? `[${e.shape}]` : "";
     console.log(
-      `${e.run_id}  [${stage}]  ${modeStr}  score=${e.score ?? "-"}  ${(e.task_desc || "").slice(0, 40)}`,
+      `${e.run_id}  [${stage}]  ${modeStr}  ${shapeStr}  score=${e.score ?? "-"}  ${(e.task_desc || "").slice(0, 40)}`,
     );
   });
 }

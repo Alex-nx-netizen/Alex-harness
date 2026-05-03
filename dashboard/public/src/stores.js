@@ -3,35 +3,95 @@
 // data flows: boot → fetchAll → stores; SSE → live update
 // ============================================================
 import {
-  fetchLive, fetchSessions, fetchSessionDetail,
-  fetchEvolution, fetchSkills, fetchIntel, fetchHealth,
+  fetchLive,
+  fetchSessions,
+  fetchSessionDetail,
+  fetchSessionTimeline,
+  fetchEvolution,
+  fetchSkills,
+  fetchIntel,
+  fetchHealth,
+  fetchHelixDetails,
   connectSSE,
-  normalizeFinding, normalizeSkill, normalizeTask, normalizeHelixRun, gitLogToProgress,
-  deriveAnomalies, deriveNextActions,
+  normalizeFinding,
+  normalizeSkill,
+  normalizeTask,
+  normalizeHelixRun,
+  gitLogToProgress,
+  deriveAnomalies,
+  deriveNextActions,
   parseTs,
-} from './data.js';
+} from "./data.js";
 
 const atom = window.__atom;
 
 // —— UI navigation ——
-export const $route       = atom('live');
-export const $cmdkOpen    = atom(false);
+export const $route = atom("live");
+export const $cmdkOpen = atom(false);
 export const $drawerSkill = atom(null);
 
+// 当前展开的 helix run（null = 折叠）；同时缓存本次详情请求的结果
+export const $expandedHelixRunId = atom(null);
+export const $helixDetailsCache = atom({}); // run_id → details JSON
+
+// helix-phase 抽屉：点击 phase 时打开，显示该 phase 的所有事件
+export const $drawerPhase = atom(null); // {run_id, phase_index} | null
+
+// —— Sessions 视图状态 ——
+export const $sessions = atom([]); // 列表（session 概要）
+export const $expandedSessionId = atom(null); // 当前展开的 session id（null = 全部折叠）
+export const $sessionTimelineCache = atom({}); // session_id → timeline JSON
+export const $sessionsFilter = atom("all"); // all | today | week
+export const $sessionsSearch = atom(""); // 搜索 session_id
+export const $sessionsPickerOpen = atom(false); // v0.7.2: 自定义下拉是否展开
+
+export async function loadHelixDetails(runId, force = false) {
+  if (!runId) return null;
+  const cache = $helixDetailsCache.get();
+  if (!force && cache[runId]) return cache[runId];
+  const details = await fetchHelixDetails(runId);
+  if (details) {
+    $helixDetailsCache.set({ ...$helixDetailsCache.get(), [runId]: details });
+  }
+  return details;
+}
+
+export async function loadSessions() {
+  const list = await fetchSessions();
+  if (Array.isArray(list)) {
+    $sessions.set(list);
+  }
+  return list;
+}
+
+export async function loadSessionTimeline(sessionId, force = false) {
+  if (!sessionId) return null;
+  const cache = $sessionTimelineCache.get();
+  if (!force && cache[sessionId]) return cache[sessionId];
+  const tl = await fetchSessionTimeline(sessionId);
+  if (tl) {
+    $sessionTimelineCache.set({
+      ...$sessionTimelineCache.get(),
+      [sessionId]: tl,
+    });
+  }
+  return tl;
+}
+
 // —— Data stores ——
-export const $events      = atom([]);
-export const $tasks       = atom([]);
-export const $helixRuns   = atom([]);
-export const $skills      = atom([]);
-export const $findings    = atom([]);
-export const $hypotheses  = atom([]);
-export const $questions   = atom([]);
-export const $progress    = atom([]);
-export const $anomalies   = atom([]);
+export const $events = atom([]);
+export const $tasks = atom([]);
+export const $helixRuns = atom([]);
+export const $skills = atom([]);
+export const $findings = atom([]);
+export const $hypotheses = atom([]);
+export const $questions = atom([]);
+export const $progress = atom([]);
+export const $anomalies = atom([]);
 export const $nextActions = atom([]);
-export const $heatmap     = atom(new Array(14 * 24).fill(0));
+export const $heatmap = atom(new Array(14 * 24).fill(0));
 export const $searchIndex = atom([]);
-export const $liveState   = atom(null);
+export const $liveState = atom(null);
 
 // —— Health / KPIs ——
 export const $health = atom({
@@ -71,30 +131,34 @@ function setupSSE() {
   if (_sseStarted) return;
   _sseStarted = true;
 
-  const sse = connectSSE(msg => {
-    if (msg.type === 'new_event') {
+  const sse = connectSSE((msg) => {
+    if (msg.type === "new_event") {
       const ev = msg.event;
       const frontendEvent = {
         id: Date.now() + Math.random(),
         ts_ms: parseTs(ev.ts) || Date.now(),
-        ts: ev.ts || '',
-        session_id: ev.session_id || '—',
+        ts: ev.ts || "",
+        session_id: ev.session_id || "—",
         task_id: msg.task_id || null,
-        skill_id: ev.skill || ev.tool_name || ev.hook_event || 'system',
-        type: ev.hook_event || 'event',
+        skill_id: ev.skill || ev.tool_name || ev.hook_event || "system",
+        type: ev.hook_event || "event",
         __new: true,
         payload: {
           duration_ms: null,
-          status: ev.is_error ? 'failed' : 'ok',
+          status: ev.is_error ? "failed" : "ok",
           tool: ev.tool_name || null,
           file: (ev.tool_input && ev.tool_input.file_path) || null,
         },
       };
       $events.set([frontendEvent, ...$events.get()].slice(0, 80));
       const k = $kpis.get();
-      $kpis.set({ ...k, events_total: k.events_total + 1, events_24h: k.events_24h + 1 });
+      $kpis.set({
+        ...k,
+        events_total: k.events_total + 1,
+        events_24h: k.events_24h + 1,
+      });
     }
-    if (msg.type === 'heartbeat') {
+    if (msg.type === "heartbeat") {
       refreshLive();
     }
   });
@@ -123,10 +187,27 @@ async function refreshLive() {
       ...k,
       tasks_24h: m.tasks_count || k.tasks_24h,
       active_skill_count: m.skills_total || k.active_skill_count,
-      pass_rate: m.skills_total > 0
-        ? parseFloat(((m.skills_done + m.skills_running) / m.skills_total).toFixed(2))
-        : k.pass_rate,
+      pass_rate:
+        m.skills_total > 0
+          ? parseFloat(
+              ((m.skills_done + m.skills_running) / m.skills_total).toFixed(2),
+            )
+          : k.pass_rate,
     });
+  }
+}
+
+// v0.7.1: 14 天 × 24 小时 调用密度
+async function refreshHeatmap() {
+  try {
+    const r = await fetch("/api/heatmap", { cache: "no-store" });
+    if (!r.ok) return;
+    const j = await r.json();
+    if (Array.isArray(j.cells) && j.cells.length === 14 * 24) {
+      $heatmap.set(j.cells);
+    }
+  } catch (e) {
+    // silent — 永不阻塞 init/refresh
   }
 }
 
@@ -164,12 +245,54 @@ function updateInsights(skills, findings) {
 
 function buildSearchIndex() {
   const idx = [];
-  $findings.get().forEach(f => idx.push({ kind: 'finding', ref: f.id, title: f.title, meta: `${f.status} · ${new Date(f.updated_ms).toLocaleString()}` }));
-  $hypotheses.get().forEach(h => idx.push({ kind: 'hypothesis', ref: h.id, title: h.title, meta: h.status }));
-  $questions.get().forEach(q => idx.push({ kind: 'question', ref: q.id, title: q.title, meta: q.status }));
-  $skills.get().forEach(s => idx.push({ kind: 'skill', ref: s.id, title: s.id, meta: `${s.freq} runs · ${(s.pass * 100).toFixed(0)}% pass` }));
-  $progress.get().forEach(p => idx.push({ kind: 'commit', ref: p.commit, title: p.body, meta: new Date(p.ts_ms).toLocaleString() }));
-  $events.get().slice(0, 50).forEach(e => idx.push({ kind: 'event', ref: '#' + Math.floor(e.id).toString(16).slice(-6), title: `${e.type} · ${e.skill_id}`, meta: new Date(e.ts_ms).toLocaleTimeString() }));
+  $findings.get().forEach((f) =>
+    idx.push({
+      kind: "finding",
+      ref: f.id,
+      title: f.title,
+      meta: `${f.status} · ${new Date(f.updated_ms).toLocaleString()}`,
+    }),
+  );
+  $hypotheses.get().forEach((h) =>
+    idx.push({
+      kind: "hypothesis",
+      ref: h.id,
+      title: h.title,
+      meta: h.status,
+    }),
+  );
+  $questions
+    .get()
+    .forEach((q) =>
+      idx.push({ kind: "question", ref: q.id, title: q.title, meta: q.status }),
+    );
+  $skills.get().forEach((s) =>
+    idx.push({
+      kind: "skill",
+      ref: s.id,
+      title: s.id,
+      meta: `${s.freq} runs · ${(s.pass * 100).toFixed(0)}% pass`,
+    }),
+  );
+  $progress.get().forEach((p) =>
+    idx.push({
+      kind: "commit",
+      ref: p.commit,
+      title: p.body,
+      meta: new Date(p.ts_ms).toLocaleString(),
+    }),
+  );
+  $events
+    .get()
+    .slice(0, 50)
+    .forEach((e) =>
+      idx.push({
+        kind: "event",
+        ref: "#" + Math.floor(e.id).toString(16).slice(-6),
+        title: `${e.type} · ${e.skill_id}`,
+        meta: new Date(e.ts_ms).toLocaleTimeString(),
+      }),
+    );
   $searchIndex.set(idx);
 }
 
@@ -187,17 +310,22 @@ async function init() {
   ]);
 
   // skills
-  const normalizedSkills = skills.length > 0 ? skills
-    : (live && Array.isArray(live.skills) ? live.skills.map(normalizeSkill) : []);
+  const normalizedSkills =
+    skills.length > 0
+      ? skills
+      : live && Array.isArray(live.skills)
+        ? live.skills.map(normalizeSkill)
+        : [];
   $skills.set(normalizedSkills);
 
   // findings (intel preferred — same parse as evolution but same endpoint)
-  const rawFindings = (intel && intel.findings) || (evolution && evolution.findings) || [];
+  const rawFindings =
+    (intel && intel.findings) || (evolution && evolution.findings) || [];
   const findings = rawFindings.map(normalizeFinding);
   $findings.set(findings);
 
-  const alive = findings.filter(f => f.status === 'alive').length;
-  const stale  = findings.filter(f => f.status === 'stale').length;
+  const alive = findings.filter((f) => f.status === "alive").length;
+  const stale = findings.filter((f) => f.status === "stale").length;
 
   // progress: use git_log (has real commit hashes)
   if (evolution && evolution.git_log && evolution.git_log.length > 0) {
@@ -216,16 +344,30 @@ async function init() {
     const evTotal = (health && health.events_processed) || 0;
     $kpis.set({
       events_total: evTotal,
-      events_24h: (health && health.tasks ? health.tasks * 8 : 0) || ((m.tasks_count || 0) * 8),
-      tasks_24h: m.tasks_count || (sessions ? sessions.reduce((acc, s) => acc + (s.task_count || 0), 0) : 0),
-      pass_rate: m.skills_total > 0
-        ? parseFloat(((m.skills_done + m.skills_running) / m.skills_total).toFixed(2))
-        : 0.85,
+      events_24h:
+        (health && health.tasks ? health.tasks * 8 : 0) ||
+        (m.tasks_count || 0) * 8,
+      tasks_24h:
+        m.tasks_count ||
+        (sessions
+          ? sessions.reduce((acc, s) => acc + (s.task_count || 0), 0)
+          : 0),
+      pass_rate:
+        m.skills_total > 0
+          ? parseFloat(
+              ((m.skills_done + m.skills_running) / m.skills_total).toFixed(2),
+            )
+          : 0.85,
       active_skill_count: m.skills_total || normalizedSkills.length,
       finding_alive: alive,
       finding_stale: stale,
       unread_actions: 0,
     });
+  }
+
+  // sessions list for the Sessions view
+  if (Array.isArray(sessions)) {
+    $sessions.set(sessions);
   }
 
   // tasks: load from recent sessions
@@ -272,12 +414,27 @@ async function init() {
   // SSE
   setupSSE();
 
+  // v0.7.1 heatmap
+  refreshHeatmap();
+
   // periodic refresh
   setInterval(refreshLive, 10_000);
   setInterval(refreshHealth, 15_000);
+  setInterval(refreshHeatmap, 60_000); // v0.7.1: heatmap 每 60s 刷新
   setInterval(buildSearchIndex, 30_000);
+  // 每 8s 刷新展开的 helix 详情（仅在有展开时）
+  setInterval(() => {
+    const id = $expandedHelixRunId.get();
+    if (id) loadHelixDetails(id, true);
+  }, 8_000);
+  // 每 20s 刷新 sessions 列表 + 当前展开的 session timeline
+  setInterval(() => {
+    loadSessions();
+    const sid = $expandedSessionId.get();
+    if (sid) loadSessionTimeline(sid, true);
+  }, 20_000);
 }
 
-init().catch(e => {
-  console.error('[harness] init failed:', e.message);
+init().catch((e) => {
+  console.error("[harness] init failed:", e.message);
 });

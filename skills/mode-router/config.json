@@ -1,0 +1,80 @@
+{
+  "version": "0.7.0",
+  "thresholds": {
+    "team": 3,
+    "manager_worker": 6
+  },
+  "weights": {
+    "explicit_solo": -999,
+    "explicit_team": 999,
+    "parallel_per_hit": 2,
+    "parallel_max": 4,
+    "review": 3,
+    "frontend_backend_cross": 2,
+    "long_task": 1,
+    "refactor": 1,
+    "files_many_15": 3,
+    "files_many_5": 2,
+    "steps_many_15": 2,
+    "steps_many_8": 1
+  },
+  "keywords": {
+    "solo": ["\\bsolo\\b", "单.*模式", "solo 跑", "单 agent"],
+    "team": ["\\bteam\\b", "team 模式", "团队.*模式", "多 agent"],
+    "parallel": [
+      "并行",
+      "前端.*后端",
+      "后端.*前端",
+      "同时做",
+      "同步进行",
+      "拆分",
+      "多模块",
+      "分别做",
+      "parallel"
+    ],
+    "review": [
+      "review",
+      "审查",
+      "审核",
+      "一写一审",
+      "code review",
+      "审阅",
+      "独立.*审"
+    ],
+    "refactor": [
+      "重构",
+      "refactor",
+      "迁移",
+      "migration",
+      "upgrade",
+      "升级",
+      "重写"
+    ],
+    "frontend": [
+      "前端",
+      "frontend",
+      "ui",
+      "react",
+      "vue",
+      "页面",
+      "组件"
+    ],
+    "backend": [
+      "后端",
+      "backend",
+      "api",
+      "数据库",
+      "database",
+      "server"
+    ]
+  },
+  "model_tiers": {
+    "manager_role": "opus",
+    "planner_role": "opus",
+    "worker_role": "sonnet",
+    "executor_role": "sonnet",
+    "reviewer_role": "sonnet",
+    "explainer_role": "haiku",
+    "summarizer_role": "haiku"
+  }
+}

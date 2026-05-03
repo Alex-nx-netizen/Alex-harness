@@ -21,6 +21,55 @@ function nowBJ() {
   );
 }
 
+// v0.7 C2：phase 链动态化（论文 §6⑤）
+// 输入：task_card.type，输出：本次该跑的 phase 列表（mode-router-coarse 始终在最前）
+function composePhasesByType(type) {
+  const t = (type || "").toLowerCase();
+  if (t === "research") {
+    // 研究类：只认知/检索，不动代码
+    return [
+      "mode-router-coarse",
+      "a1-task-understander",
+      "a2-repo-sensor",
+      "a3-retriever",
+    ];
+  }
+  if (t === "design_consulting" || t === "design" || t === "consulting") {
+    // 设计/咨询：跑到 a4 plan 出即可
+    return [
+      "mode-router-coarse",
+      "a1-task-understander",
+      "a2-repo-sensor",
+      "a4-planner",
+    ];
+  }
+  if (t === "feature" || t === "refactor" || t === "bugfix") {
+    return [
+      "mode-router-coarse",
+      "a1-task-understander",
+      "a2-repo-sensor",
+      "a4-planner",
+      "mode-router-fine",
+      "a5-executor",
+      "a6-validator",
+      "meta-audit",
+      "a7-explainer",
+    ];
+  }
+  // 默认：全链（最安全）
+  return [
+    "mode-router-coarse",
+    "a1-task-understander",
+    "a2-repo-sensor",
+    "a4-planner",
+    "mode-router-fine",
+    "a5-executor",
+    "a6-validator",
+    "meta-audit",
+    "a7-explainer",
+  ];
+}
+
 function main() {
   const startMs = Date.now();
   let input = {};
@@ -45,16 +94,24 @@ function main() {
     ? card.preferred_skills.filter((s) => typeof s === "string" && s.trim())
     : [];
 
+  // v0.7 C2：phase 链由任务 type 动态决定
+  // research        → 只跑认知/检索阶段，不动代码（无 a5/a6/a7/meta-audit）
+  // design_consulting → 纯文档/方案，跑到 a4 即可
+  // feature/refactor/bugfix → 全 phase 链 + meta-audit
+  // 其它/unknown    → 全 phase 链（默认安全）
+  const composedPhases = composePhasesByType(card.type);
+
   const result = {
     phase: PHASE,
     passes,
     summary: passes
-      ? `TaskCard 校验通过（type=${card.type}, scope=${card.scope}），preferred_skills=${preferredSkills.length} 项，等 LLM 按 SKILL.md §2 出 2-3 个方案`
+      ? `TaskCard 校验通过（type=${card.type}, scope=${card.scope}），preferred_skills=${preferredSkills.length} 项，composedPhases=${composedPhases.length}，等 LLM 按 SKILL.md §2 出 2-3 个方案`
       : `TaskCard 缺字段：${missing.join(", ")}`,
     output: {
       task_card_validated: passes ? card : null,
       missing_fields: missing,
       preferred_skills: preferredSkills,
+      composedPhases,
       next_step: passes
         ? "LLM 按 a4-planner/SKILL.md §2 生成 PlanDoc（含推荐方案）；preferred_skills 必须透传到 a5-executor 入参"
         : "回到 a1-task-understander 补全 TaskCard",

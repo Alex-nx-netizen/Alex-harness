@@ -1,7 +1,7 @@
 ---
 name: mode-router
-version: 0.1.0
-description: 根据任务描述检测并行/审查信号，推荐 solo 或 team 路由并等用户确认；记录决策到 _meta/mode-router-log.jsonl
+version: 0.3.0
+description: 根据任务描述检测并行/审查信号，推荐 solo 或 team 路由并等用户确认；v0.3 加 Manager-Worker 二层 + per-phase model tier + config 外置；记录决策到 _meta/mode-router-log.jsonl
 trigger: manual
 can_run: true
 evolution_target: runs.jsonl + _meta/mode-router-log.jsonl
@@ -141,8 +141,59 @@ log_path: _meta/mode-router-log.jsonl
 runs_log: logs/runs.jsonl
 ```
 
+## §9 模型分层建议（v0.3 / 论文 §6⑧）
+
+`team_plan.agents[*].model` 字段是给 LLM 派 subagent 时的**建议**值（不强制），可作为 Agent tool 的 `model` 参数：
+
+| 角色 | 推荐模型 | 理由 |
+|------|---------|------|
+| `manager` / planner 类 | **opus** | 拆任务 + 跨分片协调 = 最深推理 |
+| `worker` / `implementer` / `executor` / `reviewer` | **sonnet** | 实现/审查 = 最佳代码模型 |
+| `explainer` / summarizer / 简单 phase | **haiku** | 高频小任务 = 3x 成本节省 |
+
+config.json `model_tiers` 段可调（per-project override）。LLM 派 subagent 时**可以**忽略此字段（v0.3 是建议而非硬契约）。
+
+## §10 Manager-Worker 二层结构（v0.3 / 论文 §6①）
+
+`team_plan.shape` 字段三种值：
+
+| shape | 触发条件 | 结构 | 用法 |
+|-------|---------|------|------|
+| `manager_worker` | score ≥ `thresholds.manager_worker`（默认 6） | 1 manager + N workers as `subordinates[]` | LLM 先调 manager → manager 拆任务 → 调 N 个 worker |
+| `subagent_parallel` | 3 ≤ score < 6 | 扁平 N 个 worker | 并行调 Agent tool（一个消息多个 Agent 调用） |
+| `peer_review` | 含 review 词 | implementer + reviewer 串行 | implementer 完成 → reviewer 独立 review |
+
+manager 的 prompt 模板明确说"只协调，不动手；信息黑盒禁止"。subordinates 数组里的 worker 也带 model 字段。
+
+a5-executor 兼容二层：mode=team 时 subagent_run_ids 总数 ≥ 1（manager + workers 都算），不区分 shape。
+
+## §11 配置外置（v0.3 / E3）
+
+`skills/mode-router/config.json` 是评分权重的**唯一真源**：
+
+| 字段 | 用途 |
+|------|------|
+| `version` | 配置文件版本 |
+| `thresholds.team` | mode=team 阈值（默认 3） |
+| `thresholds.manager_worker` | shape=manager_worker 阈值（默认 6） |
+| `weights.*` | 各信号的加权值（explicit_solo=-999、parallel_per_hit=2、review=3 等） |
+| `keywords.{solo,team,parallel,review,refactor,frontend,backend}` | 各信号关键词 regex 数组 |
+| `model_tiers.{manager,worker,reviewer,explainer}_role` | per-phase model tier 建议 |
+
+run.cjs 启动时读 config.json，权重不再硬编码。要调整决策行为：改 config.json，不动 run.cjs。
+
+## §12 单元测试
+
+```bash
+node skills/mode-router/tests/run-tests.cjs
+```
+
+覆盖 6 case：T1 manager_worker（score≥6）/ T2 subagent_parallel（3≤score<6）/ T3 peer_review（review 词）/ T4 solo（score<3）/ T5 显式 solo 覆盖 / T6 阈值。当前 26 项断言 100% 通过。
+
 ## 修订历史
 
 | 版本 | 时间 | 变更 |
 |------|------|------|
 | 0.1.0 | 2026-5-1 | 初版；Q1-Q5 锁定；4 phase；验收清单 8 项 |
+| 0.2.0 | 2026-5-3 | 双阶段路由（--coarse/--fine）+ 100% 精确硬契约（5.7 闭环）+ team_plan.agents[] |
+| 0.3.0 | 2026-5-4 | Manager-Worker 二层（论文 §6①）+ per-phase model tier（论文 §6⑧）+ 评分外置 config.json（E3）+ 单元测试 26 断言 |

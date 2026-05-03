@@ -5,6 +5,22 @@
 
 ## 已验证（Confirmed）
 
+### F-025: Dashboard plugin cache fallback 静默失败 — 与 F-020 同源（plugin cache vs 项目源代码路径错配）
+
+- **来源**: 2026-5-4 会话 27（v0.7 升级 Worker A）
+- **现象**: dashboard 进程从 plugin cache 启动且无 `HARNESS_PROJECT_ROOT` / `CLAUDE_PROJECT_DIR` 时，`resolveProjectRoot()` fallback 到 `__dirname/..`（即 plugin 目录），那里 `_meta/live-events.jsonl` 不存在，`/api/health` 报 `jsonl_size_bytes: 0`，所有卡片空，但 SSE 仍连得上 → 假象「已连」让人以为后端在运转。
+- **结论**: plugin cache 路径 fallback 是反模式；任何「读相对路径」的 plugin 内脚本都要先校验 cwd / `__dirname` 是否落在 `plugins/cache/` 之下，是的话 fail-fast，不是静默兜底。
+- **修复**: A1+A2 已落地（`dashboard/server.js`）：
+  - `resolveProjectRoot()` 加 `isPluginCachePath()` 守门，路径含 `\plugins\cache\` 或 `/plugins/cache/` 直接 `process.exit(1)`，并打印中英文双语错误指出必须设置环境变量
+  - 启动后 1 秒做自检：`helix-runs.jsonl` 存在但 `live-events.jsonl` 缺失 → `console.warn` 提醒路径可能错配；两个都缺 → 警告 ROOT 错配
+- **影响**:
+  - F-025 关联 F-020（同源：plugin cache vs 源码路径错配 + 静默失败）
+  - 「写后必校验、启动必自检」应当成为所有 plugin 内进程的标配
+  - 其他 plugin 脚本（hooks/、skills/ 内 .cjs）若也读 `_meta/` 相对路径，需补同款守门
+- **关联**: `dashboard/server.js` `resolveProjectRoot()` / `isPluginCachePath()`；F-020；CLAUDE.md 工作约定 #8
+
+---
+
 ### F-024: helix 流程缺"skill 最优复用"门槛——每次都从 a1 → a4 → a5 重写一遍，复用率为 0
 
 - **来源**: 2026-5-2 19:xx Alex 触发 /agent-teams-playbook 后给约束："每次任务选择最优 skills 使用，这入口 helix 进入的时候，注意一下"

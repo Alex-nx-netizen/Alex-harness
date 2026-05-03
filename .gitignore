@@ -21,3 +21,12 @@ Thumbs.db
 
 # Context-curator machine output (snapshots regenerated each run)
 _meta/context-snapshots/
+
+# v0.7 e2e fixtures: replay output regenerated each run
+_meta/e2e-fixtures/.last-replay-report.json
+
+# v0.7 cron heartbeat log (local-only by default)
+_meta/heartbeat.log
+
+# v0.7 archive (rotation output)
+_meta/archive/

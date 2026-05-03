@@ -1,0 +1,52 @@
+{
+  "fixture_id": "01-simple-task",
+  "description": "最简单任务：单文件改动 + 日志写入 + 单条 finding 记录。模拟 /helix 全链路输入。",
+  "input": {
+    "task": "在 _meta/progress.md 顶部追加一条今日产出条目，记录 worker_a 完成 v0.7 升级 A1+A2+A3+B4+E1+E4 + UI 优化",
+    "task_label": "/helix",
+    "user_intent": "log_today_progress",
+    "project_dir": "E:\\ai\\study\\person\\Alex-harness"
+  },
+  "expected_phases": [
+    {
+      "phase": "mode-router-coarse",
+      "passes": true,
+      "must_have_keys": ["mode_chosen"]
+    },
+    {
+      "phase": "a1-task-understander",
+      "passes": true,
+      "must_have_keys": ["task_card", "user_goal"]
+    },
+    {
+      "phase": "a2-repo-sensor",
+      "passes": true,
+      "must_have_keys": ["touched_files"]
+    },
+    {
+      "phase": "a4-planner",
+      "passes": true,
+      "must_have_keys": ["plan_steps"]
+    },
+    {
+      "phase": "mode-router-fine",
+      "passes": true,
+      "must_have_keys": ["execution_mode"]
+    },
+    {
+      "phase": "a5-executor",
+      "passes": true,
+      "must_have_keys": ["actions_taken"]
+    },
+    {
+      "phase": "a6-validator",
+      "passes": true,
+      "must_have_keys": ["checks"]
+    },
+    {
+      "phase": "a7-explainer",
+      "passes": true,
+      "must_have_keys": ["summary"]
+    }
+  ]
+}
