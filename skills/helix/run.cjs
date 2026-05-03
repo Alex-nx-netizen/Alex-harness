@@ -143,14 +143,21 @@ async function cmdStart(task) {
   });
 
   // Dashboard 自检 + 自启（health check 优先，已运行时不重复 spawn）
+  // dashboard 是 plugin 自带文件，必须从 __dirname 解析（不能用 process.cwd()）
+  // —— 否则用户从其它目录调 /helix 时会误报 "missing"。
+  // 候选路径按优先级：plugin 内 ../../dashboard → 用户 cwd（兼容 dev 时项目根 ≠ plugin 根）
   const dashboardPort = parseInt(
     process.env.HARNESS_DASHBOARD_PORT || "7777",
     10,
   );
-  const dashboardJs = path.join(PROJECT_DIR, "dashboard", "server.js");
+  const dashboardCandidates = [
+    path.resolve(__dirname, "..", "..", "dashboard", "server.js"),
+    path.join(PROJECT_DIR, "dashboard", "server.js"),
+  ];
+  const dashboardJs = dashboardCandidates.find((p) => fs.existsSync(p));
   const dashboardUrl = `http://localhost:${dashboardPort}`;
   let dashboardStatus;
-  if (!fs.existsSync(dashboardJs)) {
+  if (!dashboardJs) {
     dashboardStatus = "missing";
   } else if (await checkPortInUse(dashboardPort)) {
     dashboardStatus = "already_running";
@@ -159,7 +166,13 @@ async function cmdStart(task) {
       const child = spawn(process.execPath, [dashboardJs], {
         detached: true,
         stdio: "ignore",
-        env: { ...process.env, HARNESS_DASHBOARD_PORT: String(dashboardPort) },
+        cwd: path.dirname(dashboardJs),
+        env: {
+          ...process.env,
+          HARNESS_DASHBOARD_PORT: String(dashboardPort),
+          // 让 dashboard 把用户当前项目当作 ROOT（即使 dashboard 装在别处）
+          CLAUDE_PROJECT_DIR: process.env.CLAUDE_PROJECT_DIR || PROJECT_DIR,
+        },
       });
       child.unref();
       dashboardStatus = "starting";
