@@ -1,7 +1,6 @@
 "use strict";
 /**
- * HARNESS Dashboard Server v0.2
- * Design: design/dashboard-draft.md v0.2
+ * HARNESS Dashboard Server v0.3
  * - Tails _meta/live-events.jsonl
  * - Aggregates Session → Task two-layer model in memory
  * - REST API + SSE
@@ -229,6 +228,22 @@ function processEvent(ev) {
 let tailOffset = 0;
 let tailBuffer = "";
 
+// Rolling event rate: count events in last 60s windows
+let _eventTimes = [];
+function recordEventTime() {
+  const now = Date.now();
+  _eventTimes.push(now);
+  // keep only last 60s
+  const cutoff = now - 60_000;
+  _eventTimes = _eventTimes.filter(t => t > cutoff);
+}
+function getEventRate() {
+  const now = Date.now();
+  const cutoff = now - 60_000;
+  const recent = _eventTimes.filter(t => t > cutoff);
+  return parseFloat((recent.length / 60).toFixed(2)); // per second
+}
+
 function tailRead() {
   try {
     if (!fs.existsSync(JSONL_PATH)) return;
@@ -258,6 +273,7 @@ function tailRead() {
         continue;
       }
       const tid = processEvent(ev);
+      recordEventTime();
       broadcast({ type: "new_event", event: ev, task_id: tid });
     }
   } catch (e) {
@@ -838,13 +854,31 @@ const server = http.createServer((req, res) => {
       progress: readProgressEntries(40),
     });
   }
-  if (url === "/api/health")
+  if (url === "/api/health") {
+    const memUsage = process.memoryUsage();
+    let jsonlSize = 0;
+    try { jsonlSize = fs.existsSync(JSONL_PATH) ? fs.statSync(JSONL_PATH).size : 0; } catch {}
     return sendJson(res, {
       ok: true,
       port: PORT,
       sessions: sessions.size,
       tasks: tasks.size,
+      live_sessions: Array.from(sessions.values()).filter(s => s.status === 'live').length,
+      sse_clients: clients.size,
+      event_rate: getEventRate(),
+      events_processed: tailOffset,
+      jsonl_size_bytes: jsonlSize,
+      jsonl_size_mb: parseFloat((jsonlSize / 1024 / 1024).toFixed(2)),
+      mem_mb: parseFloat((memUsage.heapUsed / 1024 / 1024).toFixed(1)),
+      mem_rss_mb: parseFloat((memUsage.rss / 1024 / 1024).toFixed(1)),
+      uptime_s: Math.floor(process.uptime()),
+      skills_count: getProjectSkillNamesSet().size,
+      workers: [
+        { name: 'ingest',  status: 'running', last_beat_ms: Date.now(), payload: { processed: tailOffset } },
+        { name: 'sse',     status: clients.size > 0 ? 'running' : 'idle', last_beat_ms: Date.now(), payload: { clients: clients.size } },
+      ],
     });
+  }
 
   serveStatic(req, res);
 });
