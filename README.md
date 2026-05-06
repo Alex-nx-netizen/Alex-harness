@@ -16,8 +16,6 @@
 - 🧬 **_meta/SOUL.md 长期记忆** —— evolution-tracker `--promote-soul` 把高频议案沉淀为跨 run 稳定行为规则（论文 §6③）
 - ⏰ **HEARTBEAT cron** —— `hooks/cron-heartbeat.cjs` 每天写当日摘要到 `_meta/heartbeat.log`（论文 §6⑦）
 - 🔧 **Phase 链由 a4 动态决定** —— research/design 跳 a5/a6/a7，feature/bugfix 跑全 phase（论文 §6⑤）
-- 📁 **Dashboard Sessions 视图** —— 17+ 历史 Claude 会话按 session_id 分类钻取，每个会话显示工具柱状图 + helix 运行 + 散落事件
-- 📅 **Heatmap** —— 14 天 × 24 小时调用密度热力图
 - 🔄 **helix-runs.jsonl 月度轮转** + **E2E fixture 回归** + **mode-router config 外置**
 
 完整变更见 `_meta/progress.md` 会话 27 + `_meta/reviews/v0.7.0-feishu-report.md`。
@@ -113,42 +111,10 @@ helix --finalize                  ← Ralph 二元 passes 契约
 ### 子命令
 
 ```bash
-node skills/helix/run.cjs --start "<task>"         # 启动 run + 自启 dashboard
+node skills/helix/run.cjs --start "<task>"         # 启动 run
 node skills/helix/run.cjs --finalize               # 收尾，生成 promise
 node skills/helix/run.cjs --finalize-session       # v0.7: 推送当日 session 摘要到飞书
 node skills/helix/run.cjs --status                 # 查看当前 active run
-```
-
----
-
-## 📊 Dashboard
-
-启动 helix 时自动开启 `http://localhost:7777`，浏览器访问即可看到：
-
-| 视图 | 内容 |
-|------|------|
-| **Live** | 当前会话实时事件流 + HELIX RUNS 卡片可点击展开 phase 时间线 + Team 视图 |
-| **Sessions** | 17+ 历史 Claude 会话下拉选择 + 每会话工具柱状图 + helix runs + 散落事件 |
-| **Insights** | 14 天 × 24 小时调用密度热力图 + skill ROI 象限 + anomaly z-score |
-| **Tasks / Findings / Health / Data** | 任务流 / findings.md / 健康度 / 原始 data |
-
-数据架构（**Node stdlib · no SQLite · no external deps**）：
-
-```
-hooks/dashboard-emit.cjs ──(每个 tool 调用)──→ _meta/live-events.jsonl
-   (注入 helix_run_id + helix_phase + session_id)
-                                        │
-                                        ▼ tail + SSE
-                                  dashboard/server.js
-                                        │
-   _meta/helix-runs.jsonl ──── ❶ 启动加载 + ❷ 增量 tail ────┘
-   (每个 helix --start/--report/--finalize 追加)
-                                        │
-                                        ▼
-                              内存 Map<session_id, Session>
-                                        │
-                                        ▼ REST + SSE
-                                       前端 Preact + nanostores
 ```
 
 ---
@@ -189,7 +155,7 @@ hooks/dashboard-emit.cjs ──(每个 tool 调用)──→ _meta/live-events.j
 3. **独立审兜底** —— meta-audit 不是 a4 同款，必须独立 subagent 评，避免自审自荐（论文 V3）
 4. **二元 passes 契约（Ralph）** —— 所有 phase 输出 `passes:true|false`，agent 自宣告 COMPLETE 也得人审
 5. **机器化卡点** —— 5.5 闭环（preferred_skills × skills_used）+ 5.7 闭环（mode × subagent_run_ids）；`bypass_allowed=false`
-6. **可观测、可追溯** —— 每个 skill 自留底 `runs.jsonl`，helix 全程进 `helix-runs.jsonl`，dashboard 实时可视
+6. **可观测、可追溯** —— 每个 skill 自留底 `runs.jsonl`，helix 全程进 `helix-runs.jsonl`
 7. **写后必校验** —— JSON/JSONL 写完 `JSON.parse` 立刻校验（CLAUDE.md 工作约定 #8，源于 F-008/F-020/F-025）
 8. **小步迭代** —— 一次只做一件事，每件事进 progress.md，文档带 `v0.x` 修订历史
 
@@ -221,15 +187,8 @@ Alex-harness/
 │   │   ├── config.json               # v0.7: 权重外置
 │   │   └── tests/run-tests.cjs       # 26 case
 │   └── session-reporter/
-├── dashboard/                        # v2 (Preact + Node stdlib)
-│   ├── server.js                     # REST + SSE，jsonl tail
-│   └── public/src/
-│       ├── app.js / views.js         # Live / Sessions / Insights / ...
-│       ├── stores.js                 # nanostores
-│       └── styles.css
 ├── hooks/
-│   ├── dashboard-emit.cjs            # 注入 helix_run_id + helix_phase
-│   └── cron-heartbeat.cjs            # v0.7: 每日心跳
+│   └── cron-heartbeat.cjs            # 每日心跳（可选 cron）
 ├── design/                           # 设计文档（用户主权区）
 ├── _meta/
 │   ├── task_plan.md / progress.md / findings.md
@@ -253,15 +212,9 @@ Alex-harness/
 | M2 | evolution-tracker v0.1 | ✅ 2026-4-29 |
 | M3 | context-curator v0.1 | ✅ 2026-4-30 |
 | M4 | mode-router + session-reporter v0.1 | ✅ 2026-5-1 |
-| **v0.4-v0.5** | a1-a8 业务元 + helix + 5.5 闭环 + dashboard v2 | ✅ 2026-5-1 ~ 5-2 |
+| **v0.4-v0.5** | a1-a8 业务元 + helix + 5.5 闭环 | ✅ 2026-5-1 ~ 5-2 |
 | **v0.6** | mode-router 双阶段路由 + 5.7 100% 精确硬契约 | ✅ 2026-5-3 |
-| **v0.7** 🆕 | meta-audit + 4 维评分 + Manager-Worker + SOUL.md + dashboard sessions view | ✅ 2026-5-4 |
+| **v0.7** | meta-audit + 4 维评分 + Manager-Worker + SOUL.md | ✅ 2026-5-4 |
+| **v0.7.1** 🆕 | 移除 dashboard（无价值，节省 token） | ✅ 2026-5-6 |
 | v0.8 | 真实项目验证 + meta-audit 实战 5-10 次 + SOUL.md 沉淀 | 🔲 进行中 |
 
----
-
-## 贡献 / 交流
-
-这是 Alex 的**私人 harness**，但欢迎一起探讨：开 issue 提想法、提 PR、fork 改造适配你自己的工作流，都欢迎。看到合适的设计也会合并进来。
-
-设计文档在 `design/`，铁律见 `CLAUDE.md`，进展见 `_meta/progress.md`。

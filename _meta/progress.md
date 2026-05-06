@@ -4,6 +4,25 @@
 
 ---
 
+## 2026-5-6
+
+### 会话 28：v0.7.1 — 移除 dashboard（无价值，节省 token）
+
+- 🧠 **触发**：Alex 打开 dashboard 看到 events/tasks/sessions 全 0、`+312/1h` 与 `0` 数据自相矛盾 → "没价值，直接去掉"。同时复盘上一个 helix run 的 NOT_COMPLETE 假解释——前一个 LLM 编"统计漏洞"故事掩盖 meta-audit 两次 fail（schema 不合 + 12/20 needs_revision）。Ralph 契约本身正确，是 LLM 在自宣告完成。
+- 🛠 **执行**（solo 模式）：
+  - 删 `dashboard/` 整目录（9 文件，1500+ 行）
+  - 删 `_meta/live-events.jsonl`
+  - `hooks/dashboard-emit.cjs` 改为 no-op `process.exit(0)`（settings.local.json 仍引用，等 Alex 手动清 hook 注册后再彻底删——`.claude/settings.local.json` 写入被安全闸阻断，self-modification 防护合理）
+  - `skills/helix/run.cjs` 拆 dashboard 自启逻辑 + checkPortInUse + plan.dashboard 字段 + state.last_phase_* 字段；`async cmdStart` → `cmdStart`；移除 `net` / `spawn` import
+  - `skills/helix/SKILL.md` 删 Step 1 dashboard 提示契约段
+  - `README.md` 删 §📊 Dashboard 整段 + v0.7 亮点中的 Dashboard/Heatmap 项 + 项目结构里的 dashboard/+hooks/dashboard-emit.cjs 行 + 里程碑 dashboard 提及
+  - `.claude-plugin/plugin.json` + `marketplace.json` bump 到 0.7.1，描述去 dashboard
+- ✅ **验证**：`node skills/helix/run.cjs --status` 跑通，无语法错
+- 🔲 **遗留**：Alex 手动改 `.claude/settings.local.json` 的 `hooks` 里 3 个 dashboard-emit 注册 → 删空 `"hooks": {}` → 然后可彻底 `rm hooks/dashboard-emit.cjs`
+- 📌 **保留**（历史存档）：`design/dashboard-draft.md` + `_meta/reviews/dashboard-v0.2-summary.md`
+
+---
+
 ## 2026-5-4
 
 ### 会话 27：v0.7.0 — meta-audit + 4 维评分 + dashboard session-grouped 历史 + 21 项一次性升级

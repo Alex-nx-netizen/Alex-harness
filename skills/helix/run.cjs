@@ -16,9 +16,8 @@
 //   ❌ 不脱离 session 粒度（一次 /helix = 一条 session record）
 
 const fs = require("fs");
-const net = require("net");
 const path = require("path");
-const { spawn, spawnSync } = require("child_process");
+const { spawnSync } = require("child_process");
 
 const PROJECT_DIR = process.cwd();
 const META_DIR = path.join(PROJECT_DIR, "_meta");
@@ -97,27 +96,9 @@ function clearState() {
   if (fs.existsSync(HELIX_STATE)) fs.unlinkSync(HELIX_STATE);
 }
 
-function checkPortInUse(port, host = "127.0.0.1", timeoutMs = 300) {
-  return new Promise((resolve) => {
-    const socket = new net.Socket();
-    let done = false;
-    const finish = (inUse) => {
-      if (done) return;
-      done = true;
-      socket.destroy();
-      resolve(inUse);
-    };
-    socket.setTimeout(timeoutMs);
-    socket.once("connect", () => finish(true));
-    socket.once("timeout", () => finish(false));
-    socket.once("error", () => finish(false));
-    socket.connect(port, host);
-  });
-}
-
 // --- subcommands ---
 
-async function cmdStart(task) {
+function cmdStart(task) {
   const taskStr = (task || "").trim();
   const helix_run_id = genRunId();
 
@@ -150,62 +131,11 @@ async function cmdStart(task) {
     phase_reports: [],
   });
 
-  // Dashboard 自检 + 自启（health check 优先，已运行时不重复 spawn）
-  // dashboard 是 plugin 自带文件，必须从 __dirname 解析（不能用 process.cwd()）
-  // —— 否则用户从其它目录调 /helix 时会误报 "missing"。
-  // 候选路径按优先级：plugin 内 ../../dashboard → 用户 cwd（兼容 dev 时项目根 ≠ plugin 根）
-  const dashboardPort = parseInt(
-    process.env.HARNESS_DASHBOARD_PORT || "7777",
-    10,
-  );
-  const dashboardCandidates = [
-    path.resolve(__dirname, "..", "..", "dashboard", "server.js"),
-    path.join(PROJECT_DIR, "dashboard", "server.js"),
-  ];
-  const dashboardJs = dashboardCandidates.find((p) => fs.existsSync(p));
-  const dashboardUrl = `http://localhost:${dashboardPort}`;
-  let dashboardStatus;
-  if (!dashboardJs) {
-    dashboardStatus = "missing";
-  } else if (await checkPortInUse(dashboardPort)) {
-    dashboardStatus = "already_running";
-  } else {
-    try {
-      const child = spawn(process.execPath, [dashboardJs], {
-        detached: true,
-        stdio: "ignore",
-        cwd: path.dirname(dashboardJs),
-        env: {
-          ...process.env,
-          HARNESS_DASHBOARD_PORT: String(dashboardPort),
-          // 让 dashboard 把用户当前项目当作 ROOT（即使 dashboard 装在别处）
-          CLAUDE_PROJECT_DIR: process.env.CLAUDE_PROJECT_DIR || PROJECT_DIR,
-        },
-      });
-      child.unref();
-      dashboardStatus = "starting";
-    } catch (e) {
-      dashboardStatus = `spawn_failed: ${e.message}`;
-    }
-  }
-  console.error(
-    `\n${"━".repeat(56)}\n` +
-      `🟣  HARNESS Dashboard  →  ${dashboardUrl}  [${dashboardStatus}]\n` +
-      `    实时查看 phase 进度 / skill 状态 / helix run\n` +
-      `${"━".repeat(56)}\n`,
-  );
-
   const plan = {
     helix_run_id,
     promise: "NOT_COMPLETE",
     project_dir: PROJECT_DIR,
-    dashboard: {
-      url: dashboardUrl,
-      status: dashboardStatus,
-      note: "可选——不打开也不影响 helix 流程；但建议打开以监控 a1-a8 phase 实时状态",
-    },
     instructions: [
-      `📊 Dashboard: ${dashboardUrl} (status=${dashboardStatus}) — 建议打开浏览器查看实时进度`,
       "你必须严格按 phases 顺序执行；每个 phase 调用对应 run.cjs（脚本会自动 --report 给 helix）",
       "任何 phase passes=false → 立刻暂停 + 报告用户决策；不自动重试（Ralph 反对自宣告）",
       "破坏性操作（git push --force / rm -rf / drop / 改 CI 等）→ 强制 inject a8-risk-guard",
@@ -286,12 +216,6 @@ function cmdReport(phase, jsonStr) {
     passes: entry.passes,
     ts: entry.ts,
   });
-  // v0.7 dashboard 可视化：记录最近完成的 phase + 时间，让 hook 给后续事件打标签
-  state.last_completed_phase = phase;
-  state.last_phase_ts = entry.ts;
-  state.last_phase_passes = entry.passes;
-  state.last_phase_summary = entry.summary;
-  state.last_phase_duration_ms = entry.duration_ms;
   writeState(state);
   console.error(
     `[helix] ✅ ${phase} 已汇报 (passes=${entry.passes}, run=${state.helix_run_id})`,
@@ -606,7 +530,7 @@ async function main() {
   const args = process.argv.slice(2);
   const sub = args[0];
   if (sub === "--start") {
-    await cmdStart(args.slice(1).join(" "));
+    cmdStart(args.slice(1).join(" "));
   } else if (sub === "--report") {
     cmdReport(args[1], args[2] || "{}");
   } else if (sub === "--finalize") {

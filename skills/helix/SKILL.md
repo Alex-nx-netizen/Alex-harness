@@ -33,22 +33,7 @@ status:
 node skills/helix/run.cjs --start "<用户的任务描述>"
 ```
 
-输出 JSON 含 `helix_run_id`、`phases` 计划，以及 **`dashboard` 字段**（含 `url` + `status`）。**记下 helix_run_id**，后续 phase 都关联到它。
-
-**Dashboard 自动启动 + 必须告知用户**：
-
-`run.cjs --start` 内部已做了 dashboard 端口 health check：
-- `status=already_running` → dashboard 早就在跑，直接复用
-- `status=starting` → 本次启动了一个新的（detached 进程，不影响 helix 流程）
-- `status=missing` / `spawn_failed` → 文件不存在 / 启动失败，记录但不阻塞
-
-**LLM 在 Step 1 输出 JSON 后，必须用一句中文提示用户**（即使用户没问也要主动说），格式参考：
-
-> 📊 Dashboard 已就绪: http://localhost:7777 (status=already_running) — 浏览器打开可看到 a1-a8 phase 实时进度、skill 状态和本次 helix run 详情。
->
-> ⚠ URL 后必须用 ASCII 半角空格 + 半角括号 ` (...)` 包状态，**不要**用全角 `（）`——会让终端把 `（status=...)` 吃进 URL，链接点不对（参见 v0.5.1 修复）。
-
-不打开也不影响 helix 流程；这是给用户的可观察性入口。
+输出 JSON 含 `helix_run_id`、`phases` 计划。**记下 helix_run_id**，后续 phase 都关联到它。
 
 ### Step 2：上下文加载
 
@@ -87,7 +72,7 @@ a3-retriever 输出 keywords + scope 后，**a4-planner 之前**，必须执行 
 
 | 步骤 | 动作 | 输出 |
 |---|---|---|
-| 5.5.1 | **本地 skill 扫描** — 列出本项目 `skills/` 下的 14 个 skill（a1-a8 + context-curator / evolution-tracker / helix / knowledge-curator / mode-router / session-reporter）+ `dashboard/api/skills` 当前状态 | 候选名单 + 状态 |
+| 5.5.1 | **本地 skill 扫描** — 列出本项目 `skills/` 下的 13 个 skill（a1-a8 + meta-audit + context-curator / evolution-tracker / helix / knowledge-curator / mode-router / session-reporter）| 候选名单 |
 | 5.5.2 | **全局/外部 skill 搜索** — 检查 system-reminder 里 available skills 列表（含 ECC、superpowers、ui-ux-pro-max 等）；若仍无匹配，调 `Skill(skill="find-skills", args="<task keywords>")` 拉外部 | 命中的 skill 名 + 用途 |
 | 5.5.3 | **匹配评估** — 对每个候选给"匹配度"（强/弱/无）；强匹配的 skill 写入 a4-planner 输入的 `task_card.preferred_skills` 数组 | preferred_skills 注入 plan |
 
