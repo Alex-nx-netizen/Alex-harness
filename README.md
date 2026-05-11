@@ -2,48 +2,234 @@
 
 > Alex 的私人 SDLC Agent Harness —— 基于 OpenAI Harness Engineering 三部曲 + 元思想，让 Claude 在编程协作中更可控、可观测、可自我进化。
 >
-> **当前版本：v0.7.0**（2026-5-4）
+> **当前版本：v0.7.1**（2026-5-6）· 工作目录：`/Users/a1234/person/ai/study/Alex-harness/`
 
 ---
 
-## v0.7 亮点
+## 📚 目录
 
-核心思路 —— **层级 + 独立评审是真正的胜负手，单纯并行 agent 效应有限** —— v0.7 把这条洞落地为机器化契约：
-
-- 🛡 **Embedded meta-audit phase** —— 在 a6 之后、finalize 之前，独立 subagent（code-reviewer + security-reviewer）独立审，输出 `correctness/security/maintainability/alignment_with_plan` 4 维 0-5 分
-- 📊 **a6-validator 4 维评分** —— `accuracy/completeness/actionability/format` 0-5 分；helix-runs.jsonl 自动多带 score 字段，evolution-tracker 长期分析
-- 👥 **Manager-Worker 二层 team_plan** —— `mode-router score≥6` 时输出含 `subordinates[]` 的二层结构（论文 §6①）
-- 🧬 **_meta/SOUL.md 长期记忆** —— evolution-tracker `--promote-soul` 把高频议案沉淀为跨 run 稳定行为规则（论文 §6③）
-- ⏰ **HEARTBEAT cron** —— `hooks/cron-heartbeat.cjs` 每天写当日摘要到 `_meta/heartbeat.log`（论文 §6⑦）
-- 🔧 **Phase 链由 a4 动态决定** —— research/design 跳 a5/a6/a7，feature/bugfix 跑全 phase（论文 §6⑤）
-- 🔄 **helix-runs.jsonl 月度轮转** + **E2E fixture 回归** + **mode-router config 外置**
-
-完整变更见 `_meta/progress.md` 会话 27 + `_meta/reviews/v0.7.0-feishu-report.md`。
+- [一句话讲清楚](#一句话讲清楚)
+- [图 1：四层元思想架构](#图-1四层元思想架构)
+- [图 2：/helix 9-phase 流程](#图-29-phase-helix-流程)
+- [图 3：14 个 skill 的组织关系](#图-314-个-skill-的组织关系)
+- [图 4：一次 run 的数据流](#图-4一次-run-的数据流)
+- [图 5：自进化闭环](#图-5自进化闭环)
+- [安装](#安装)
+- [快速上手](#快速上手)
+- [Skills 全览（表格）](#skills-全览)
+- [设计原则](#设计原则)
+- [项目结构](#项目结构)
+- [里程碑](#里程碑)
 
 ---
 
-## 核心思想
-
-引自元思想四层模型：
+## 一句话讲清楚
 
 ```
-元（思想/意图）
-  ↓
-组织镜像（将现实结构映射成 AI 可处理的数据）
-  ↓
-节奏编排（Task → Plan → Execute → Validate → Audit 的循环节拍）
-  ↓
-意图放大（最小输入，撬动最大产出）
+你说一句话 → /helix 接住 → 9 个 phase 自动跑 → 每步二元 passes 判定
+            → 独立 subagent 审 → 你拍板确认 → 输出 promise=COMPLETE
+            → 沉淀到 SOUL.md → 下次更聪明
 ```
 
-本项目将这四层具象化为：
+**核心赌注**：层级 + 独立评审是真胜负手，单纯并行 agent 效应有限。
 
-| 层 | 对应组件 | 职责 |
-|----|---------|------|
-| 元层 | helix + a8-risk-guard + meta-audit | 意图保真 + 安全边界 + 独立审 |
-| 组织镜像层 | a1 + a2 + a3 | 把现实映射成可处理结构 |
-| 节奏编排层 | a4 → a5 → a6 → meta-audit → a7 | SDLC 执行节拍 |
-| 意图放大层 | mode-router + context-curator + evolution-tracker | 最小输入产生最大产出 |
+---
+
+## 图 1：四层元思想架构
+
+> **怎么读**：从上到下是抽象层 → 具象层。每层负责一类问题，互不越界。颜色编码贯穿全文（红=元层，蓝=镜像，绿=节奏，橙=放大）。
+
+```mermaid
+flowchart TD
+    classDef meta fill:#fee2e2,stroke:#dc2626,stroke-width:2px,color:#7f1d1d
+    classDef mirror fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1e3a8a
+    classDef rhythm fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#14532d
+    classDef amp fill:#fed7aa,stroke:#ea580c,stroke-width:2px,color:#7c2d12
+
+    META["🧠 元层<br/>意图保真 · 安全边界 · 独立审"]:::meta
+    MIRROR["🔍 组织镜像层<br/>把现实映射成可处理结构"]:::mirror
+    RHYTHM["🥁 节奏编排层<br/>SDLC 执行节拍"]:::rhythm
+    AMP["📡 意图放大层<br/>最小输入产生最大产出"]:::amp
+
+    META --> MIRROR
+    MIRROR --> RHYTHM
+    RHYTHM --> AMP
+
+    META -.对应.-> M1["helix · a8-risk-guard · meta-audit"]:::meta
+    MIRROR -.对应.-> M2["a1-task-understander · a2-repo-sensor · a3-retriever"]:::mirror
+    RHYTHM -.对应.-> M3["a4-planner → a5-executor → a6-validator → meta-audit → a7-explainer"]:::rhythm
+    AMP -.对应.-> M4["mode-router · context-curator · evolution-tracker"]:::amp
+```
+
+---
+
+## 图 2：9-phase helix 流程
+
+> **怎么读**：菱形是决策点，矩形是 phase。红色边框 = 强制人工卡点；虚线 = 可跳过；🛑 = Ralph 二元 passes 关。
+
+```mermaid
+flowchart TD
+    classDef phase fill:#f1f5f9,stroke:#475569,stroke-width:1.5px,color:#0f172a
+    classDef gate fill:#fef3c7,stroke:#d97706,stroke-width:2.5px,color:#78350f
+    classDef audit fill:#fee2e2,stroke:#dc2626,stroke-width:2px,color:#7f1d1d
+    classDef done fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#14532d
+    classDef optional stroke-dasharray:5 5
+
+    USER([👤 用户一句话])
+    USER --> S0
+
+    S0[["Step 0.5<br/>mode-router --coarse<br/>solo/team 预判"]]:::phase
+    S0 --> S3
+    S3[["Step 3<br/>a1-task-understander<br/>→ TaskCard"]]:::phase
+    S3 --> S4
+    S4[["Step 4<br/>a2-repo-sensor<br/>→ RepoContext"]]:::phase
+    S4 --> S5
+    S5[["Step 5<br/>a3-retriever<br/>关键词检索"]]:::phase
+    S5:::optional
+    S5 --> S55
+    S55{{"Step 5.5<br/>skill 最优选择<br/>强匹配必须复用"}}:::gate
+    S55 --> S6
+    S6[["Step 6<br/>a4-planner<br/>→ composedPhases[]"]]:::phase
+    S6 --> S57
+    S57{{"Step 5.7<br/>mode-router --fine<br/>100% 精确硬契约"}}:::gate
+    S57 --> S7
+    S7{{"🛑 Step 7<br/>用户确认 plan + mode"}}:::gate
+    S7 --> S8
+    S8[["Step 8<br/>a5-executor<br/>5.5 + 5.7 双闭环"]]:::phase
+    S8 --> S9
+    S9[["Step 9<br/>a6-validator<br/>4 维评分 0-20"]]:::phase
+    S9 --> S95
+    S95[["🆕 Step 9.5<br/>meta-audit<br/>独立 subagent 评审"]]:::audit
+    S95 --> S10
+    S10[["Step 10<br/>a7-explainer<br/>commit msg + PR 描述"]]:::phase
+    S10 --> FIN
+    FIN(["🏁 helix --finalize<br/>promise=COMPLETE | NOT_COMPLETE"]):::done
+```
+
+**phase 链由 a4 动态决定**：
+
+| 任务类型 | 跳过哪些 phase |
+|---|---|
+| `research` / `design` | 跳过 a5-executor / a6-validator / a7-explainer |
+| `feature` / `bugfix` | 跑全 9 phase |
+| `explain` | 只跑 a1 + a3 + a7 |
+
+---
+
+## 图 3：14 个 skill 的组织关系
+
+> **怎么读**：两大块——**业务元**（a1-a8 执行链）和**治理元**（横切，给执行链上锁）。helix 是唯一暴露的入口；其他 13 个不能单独触发。
+
+```mermaid
+flowchart LR
+    classDef entry fill:#fde68a,stroke:#b45309,stroke-width:3px,color:#78350f
+    classDef sdlc fill:#dbeafe,stroke:#2563eb,stroke-width:1.5px,color:#1e3a8a
+    classDef audit fill:#fee2e2,stroke:#dc2626,stroke-width:2px,color:#7f1d1d
+    classDef gov fill:#fed7aa,stroke:#ea580c,stroke-width:1.5px,color:#7c2d12
+    classDef guard fill:#fecaca,stroke:#b91c1c,stroke-width:2px,color:#7f1d1d
+
+    USER([👤 用户]) --> HELIX
+    HELIX(["⚡ helix<br/>唯一入口 / 领导视角"]):::entry
+
+    subgraph BIZ["📦 业务元 — SDLC 执行链"]
+        direction TB
+        A1["a1-task-understander<br/>解析意图"]:::sdlc
+        A2["a2-repo-sensor<br/>扫仓库"]:::sdlc
+        A3["a3-retriever<br/>关键词检索"]:::sdlc
+        A4["a4-planner<br/>动态 phase 链"]:::sdlc
+        A5["a5-executor<br/>5.5 + 5.7 闭环"]:::sdlc
+        A6["a6-validator<br/>4 维评分"]:::sdlc
+        META["meta-audit<br/>🆕 独立审"]:::audit
+        A7["a7-explainer<br/>commit + PR"]:::sdlc
+        A8["a8-risk-guard<br/>破坏性操作守门"]:::guard
+
+        A1 --> A2 --> A3 --> A4 --> A5 --> A6 --> META --> A7
+        A8 -.强制拦截.-> A5
+    end
+
+    subgraph GOV["🛠 治理元 — 可观测 + 自进化"]
+        direction TB
+        MR["mode-router<br/>solo/team 路由"]:::gov
+        CC["context-curator<br/>800 字硬上限"]:::gov
+        ET["evolution-tracker<br/>L2 复盘 + SOUL"]:::gov
+        KC["knowledge-curator<br/>资料 → 飞书 wiki"]:::gov
+        SR["session-reporter<br/>飞书成长日志"]:::gov
+    end
+
+    HELIX --> BIZ
+    HELIX -.编排.-> GOV
+    GOV -.反向约束.-> BIZ
+```
+
+---
+
+## 图 4：一次 run 的数据流
+
+> **怎么读**：上下泳道。**实线**=数据传递，**虚线**=写日志。每个 phase 都自留底，三类行（start/phase/finalize）进 `helix-runs.jsonl`。
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant U as 👤 用户
+    participant H as ⚡ helix
+    participant A1 as a1-task
+    participant A2 as a2-repo
+    participant A4 as a4-planner
+    participant A5 as a5-exec
+    participant A6 as a6-valid
+    participant MA as meta-audit
+    participant L as 📒 helix-runs.jsonl
+
+    U->>H: /helix 加用户认证模块
+    H->>L: write {type:"start", helix_run_id}
+    H->>A1: 派 TaskCard 任务
+    A1-->>H: {type, scope, done_criteria, risk_level}
+    H->>A2: 派 RepoContext 任务
+    A2-->>H: {tech_stack, dirty, commits}
+    H->>A4: TaskCard + RepoContext
+    A4-->>H: PlanDoc + composedPhases[]
+    H->>U: 🛑 plan + mode 求确认
+    U-->>H: ✅ 确认
+    H->>A5: 执行 plan
+    A5-->>H: passes + skills_check
+    A5->>L: write {type:"phase", passes:true}
+    H->>A6: 自动跑测试 + lint
+    A6-->>H: score:{a,c,a,f,total:0-20}
+    H->>MA: 派独立 subagent 评审
+    MA-->>H: score:{cor,sec,maint,align,total:0-20} + findings[]
+    H->>L: write {type:"finalize", promise:"COMPLETE"}
+    H-->>U: 🏁 promise=COMPLETE
+```
+
+---
+
+## 图 5：自进化闭环
+
+> **怎么读**：每次 run 的日志 → evolution-tracker 蒸馏 → 高频议案 → 沉淀到 `SOUL.md` → 下一次 run 自动遵循。这是 harness 自己"长记性"的机制。
+
+```mermaid
+flowchart LR
+    classDef run fill:#dbeafe,stroke:#2563eb,stroke-width:1.5px,color:#1e3a8a
+    classDef tracker fill:#fed7aa,stroke:#ea580c,stroke-width:2px,color:#7c2d12
+    classDef soul fill:#dcfce7,stroke:#16a34a,stroke-width:2.5px,color:#14532d
+    classDef feedback fill:#fef3c7,stroke:#d97706,stroke-width:1.5px,color:#78350f
+
+    R1["🔄 helix run N<br/>(执行 + 自审)"]:::run
+    R1 -->|append| LOG[("📒 helix-runs.jsonl")]:::run
+
+    LOG --> ET["🔬 evolution-tracker<br/>L2 复盘"]:::tracker
+    ET --> PROP["💡 改进议案池<br/>skill-proposals/_index.jsonl"]:::tracker
+
+    PROP -->|引用 ≥3 次 + approved| PROMOTE["⬆ --promote-soul<br/>--apply"]:::tracker
+    PROMOTE --> SOUL[("📖 _meta/SOUL.md<br/>跨 run 稳定行为规则")]:::soul
+
+    SOUL -->|每次 run 注入 context| R2["🔄 helix run N+1<br/>(更聪明)"]:::run
+    R2 -->|continue| LOG
+
+    HEART["⏰ HEARTBEAT cron<br/>每日摘要"]:::feedback
+    HEART -.写.-> HBLOG[("_meta/heartbeat.log")]:::feedback
+    LOG -.读.-> HEART
+```
 
 ---
 
@@ -56,7 +242,7 @@
 /plugin install alex-harness@Alex-nx-netizen/Alex-harness
 ```
 
-安装后 **唯一暴露 `/helix` 入口**，13 个下属 skill 不再单独可见，统一从 helix 派下去。
+安装后**唯一暴露 `/helix` 入口**，13 个下属 skill 不再单独可见。
 
 ### 方式二：克隆到项目
 
@@ -70,50 +256,18 @@ cd Alex-harness
 
 ## 快速上手
 
-### 唯一入口：/helix
-
-```
+```bash
 /helix 帮我给这个项目加用户认证模块
 /helix 修复 src/api/payment.ts 里的并发 bug
 /helix 解释 _meta/task_plan.md 里的任务计划
 ```
 
-helix 自动按以下 phase 链编排（v0.7 9 phase）：
-
-```
-mode-router-coarse (Step 0.5)
-  ↓
-a1-task-understander (Step 3)
-  ↓
-a2-repo-sensor (Step 4)
-  ↓
-[a3-retriever]                    ← scope 明确时可跳
-  ↓
-[skill-discovery 5.5]              ← 强匹配 skill 必须复用
-  ↓
-a4-planner (Step 6)               ← 输出 composedPhases
-  ↓
-mode-router-fine (Step 5.7)        ← 100% 精确硬契约：solo/team
-  ↓
-🛑 用户确认 plan + mode (Step 7)   ← Ralph 反对自宣告完成
-  ↓
-a5-executor (Step 8)              ← 5.5 + 5.7 双闭环卡点
-  ↓
-a6-validator (Step 9)             ← 4 维 0-5 评分
-  ↓
-meta-audit (Step 9.5)             ← v0.7: 独立 subagent 审
-  ↓
-a7-explainer (Step 10)
-  ↓
-helix --finalize                  ← Ralph 二元 passes 契约
-```
-
-### 子命令
+### 手动子命令（调试用）
 
 ```bash
 node skills/helix/run.cjs --start "<task>"         # 启动 run
 node skills/helix/run.cjs --finalize               # 收尾，生成 promise
-node skills/helix/run.cjs --finalize-session       # v0.7: 推送当日 session 摘要到飞书
+node skills/helix/run.cjs --finalize-session       # 推送当日 session 摘要到飞书
 node skills/helix/run.cjs --status                 # 查看当前 active run
 ```
 
@@ -123,15 +277,15 @@ node skills/helix/run.cjs --status                 # 查看当前 active run
 
 ### 业务元（SDLC 执行链 · a1-a8）
 
-| Skill | 职责 | 输出 |
-|-------|------|------|
+| Skill | 职责 | 关键输出 |
+|---|---|---|
 | `helix` | 唯一入口，编排 a1-a8 + meta-audit | `helix-runs.jsonl` 三类行 + `promise: COMPLETE\|NOT_COMPLETE` |
 | `a1-task-understander` | 解析任务意图 → TaskCard | `{type, scope, out_of_scope, done_criteria, risk_level, preferred_skills}` |
 | `a2-repo-sensor` | 扫仓库结构、技术栈、commit、dirty | RepoContext JSON |
 | `a3-retriever` | 关键词检索 | `keywords[]` + scope（多数任务可跳） |
 | `a4-planner` | TaskCard 校验 + 输出 `composedPhases[]`（v0.7 动态） | PlanDoc + preferred_skills 透传 |
 | `a5-executor` | 用户确认后执行 + 5.5/5.7 双闭环 | passes + skills_check + mode_check |
-| `a6-validator` | 自动检测项目类型跑测试/lint + **4 维评分** | `{passes, score:{accuracy,completeness,actionability,format,total:0-20}}` |
+| `a6-validator` | 检测项目类型跑测试/lint + **4 维评分** | `{passes, score:{accuracy,completeness,actionability,format,total:0-20}}` |
 | `meta-audit` 🆕 | **独立 subagent 评审** | `{score:{correctness,security,maintainability,alignment,total:0-20}, findings[]}` |
 | `a7-explainer` | 生成 commit message / PR 描述 | 英文 commit ≤72 字符 + 中文 PR 描述 |
 | `a8-risk-guard` | 破坏性操作前强制风险评估 | LOW/HIGH/CRITICAL 分级 |
@@ -139,12 +293,12 @@ node skills/helix/run.cjs --status                 # 查看当前 active run
 ### 治理元（可观测性 + 自我进化）
 
 | Skill | 职责 | 触发 |
-|-------|------|------|
+|---|---|---|
 | `mode-router` | 双阶段路由（粗 0.5 + 细 5.7），输出 `solo / team[subagent_parallel\|manager_worker\|peer_review]` | helix 自动 |
 | `context-curator` | 跨会话上下文压缩 + 7 级削减阶梯（800 字硬上限） | helix 软约束 |
 | `evolution-tracker` | runs.jsonl → L2 复盘 → 改进议案；`--promote-soul` 沉淀 SOUL.md | helix 软约束 / 手动 |
 | `knowledge-curator` | 整理飞书/网页资料 → 飞书 wiki | `--finalize-session` 触发 |
-| `session-reporter` | 推飞书成长日志 Base + IM | `--finalize-session` 触发（Stop hook 已禁用） |
+| `session-reporter` | 推飞书成长日志 Base + IM | `--finalize-session` 触发 |
 
 ---
 
@@ -152,11 +306,11 @@ node skills/helix/run.cjs --status                 # 查看当前 active run
 
 1. **最小输入，最大产出** —— 一句话触发 `/helix`，9 个 phase 自动编排
 2. **强制安全边界** —— a8-risk-guard 在破坏性操作前强制评估，不可催促降级
-3. **独立审兜底** —— meta-audit 不是 a4 同款，必须独立 subagent 评，避免自审自荐（论文 V3）
+3. **独立审兜底** —— meta-audit 必须独立 subagent 评，避免自审自荐
 4. **二元 passes 契约（Ralph）** —— 所有 phase 输出 `passes:true|false`，agent 自宣告 COMPLETE 也得人审
 5. **机器化卡点** —— 5.5 闭环（preferred_skills × skills_used）+ 5.7 闭环（mode × subagent_run_ids）；`bypass_allowed=false`
 6. **可观测、可追溯** —— 每个 skill 自留底 `runs.jsonl`，helix 全程进 `helix-runs.jsonl`
-7. **写后必校验** —— JSON/JSONL 写完 `JSON.parse` 立刻校验（CLAUDE.md 工作约定 #8，源于 F-008/F-020/F-025）
+7. **写后必校验** —— JSON/JSONL 写完 `JSON.parse` 立刻校验（CLAUDE.md 工作约定 #8）
 8. **小步迭代** —— 一次只做一件事，每件事进 progress.md，文档带 `v0.x` 修订历史
 
 ---
@@ -166,7 +320,7 @@ node skills/helix/run.cjs --status                 # 查看当前 active run
 ```
 Alex-harness/
 ├── .claude-plugin/
-│   ├── plugin.json                   # 插件清单（v0.7.0）
+│   ├── plugin.json                   # 插件清单（v0.7.1）
 │   └── marketplace.json
 ├── skills/                           # 14 个 skill（plugin 模式）
 │   ├── helix/                        # 唯一入口
@@ -194,9 +348,8 @@ Alex-harness/
 │   ├── task_plan.md / progress.md / findings.md
 │   ├── helix-runs.jsonl              # 所有 helix run 三类行
 │   ├── SOUL.md                       # v0.7: 跨 run 稳定行为规则
-│   ├── rotate.cjs                    # v0.7: jsonl 月度轮转
-│   ├── e2e-fixtures/                 # v0.7: replay diff 回归
-│   ├── archive/                      # 月度归档目标
+│   ├── rotate.cjs                    # jsonl 月度轮转
+│   ├── e2e-fixtures/                 # replay diff 回归
 │   └── reviews/                      # 里程碑总报告
 ├── CLAUDE.md                         # 项目级 Claude 指令
 └── README.md
@@ -207,7 +360,7 @@ Alex-harness/
 ## 里程碑
 
 | 版本 | 目标 | 状态 |
-|------|------|------|
+|---|---|---|
 | M1 | knowledge-curator 反馈闭环 | ✅ 2026-4-29 |
 | M2 | evolution-tracker v0.1 | ✅ 2026-4-29 |
 | M3 | context-curator v0.1 | ✅ 2026-4-30 |
@@ -215,6 +368,22 @@ Alex-harness/
 | **v0.4-v0.5** | a1-a8 业务元 + helix + 5.5 闭环 | ✅ 2026-5-1 ~ 5-2 |
 | **v0.6** | mode-router 双阶段路由 + 5.7 100% 精确硬契约 | ✅ 2026-5-3 |
 | **v0.7** | meta-audit + 4 维评分 + Manager-Worker + SOUL.md | ✅ 2026-5-4 |
-| **v0.7.1** 🆕 | 移除 dashboard（无价值，节省 token） | ✅ 2026-5-6 |
+| **v0.7.1** | 移除 dashboard（无价值，节省 token） | ✅ 2026-5-6 |
 | v0.8 | 真实项目验证 + meta-audit 实战 5-10 次 + SOUL.md 沉淀 | 🔲 进行中 |
 
+---
+
+## 关键参考
+
+- **飞书 Harness 合集 wiki**：<https://www.feishu.cn/wiki/UtW0wUbPbifCX4kk3ypcGcyinGg>（13.2 万字，harness 设计的主要理论依据）
+- **设计文档**：`design/harness-blueprint.md`（用户主权区，持续 v0.x → v1.0）
+- **执行日志**：`_meta/progress.md`（最新在最上面）
+- **踩坑实录**：`_meta/findings.md`（失败比成功更值钱）
+
+---
+
+## 贡献 / 反馈
+
+欢迎 issues / PRs / forks。本项目是 Alex 的私人实验场，但所有 skill 都开放给社区。
+
+如果你也在搭自己的 harness，欢迎来飞书 wiki 交流。

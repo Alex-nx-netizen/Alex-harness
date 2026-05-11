@@ -4,6 +4,59 @@
 
 ---
 
+## 2026-5-11
+
+### 会话 30：README 图解化 + code-review skill 设计草案
+
+- 🧠 **触发**：Alex "需要给项目整一个图解的详细说明放到 README" → 完整重写 README 加 5 张 Mermaid 图；Alex 接着反馈"好像没有代码审查这一块"→ 事实核查 meta-audit 已覆盖 correctness/security/maintainability/alignment 但缺 performance + 命名不显眼 → Alex 拍板"新设计一个 code-review 独立 skill"
+- 🛠 **README 图解化**（一次完整重写，11k）：
+  - 5 张 Mermaid 图：四层元思想架构 / 9-phase helix 流程 / 14 skill 组织关系（subgraph 分组）/ sequenceDiagram 数据流 / 自进化闭环
+  - 一致色彩编码（红=元层 / 蓝=镜像 / 绿=节奏 / 橙=放大 / 黄=人工卡点）
+  - 每张图前一句话"怎么读"引导
+  - 删除 v0.7 亮点版本噪声（移到里程碑表）
+- 📝 **code-review draft v0.1**：`design/code-review-draft.md`
+  - 与 meta-audit 边界：meta-audit=审计元（二元闸），code-review=质量元（建议清单）
+  - 5 维 0-5 分：quality / security / performance / readability / testability（满分 25，performance 是新增维度）
+  - 位置：helix Step 8.5（a5 之后、a6 之前），早于 meta-audit
+  - 失败处理：soft（findings 进 PR 描述），不卡 finalize
+  - 输入/输出 schema 骨架已写，subagent 派遣模式跟 meta-audit 一样（脚本不真的派，LLM 主进程派）
+  - **6 个开放决策点等 Alex 拍板**：并存 vs 替换 meta-audit / 触发时机 / 维度数 / 失败硬度 / 是否引入语言专属 reviewer / 是否默认 opt-in
+- 🔲 **下一步**（等 Alex 回 Q1-Q6 再动）：
+  - 实现 `skills/code-review/{SKILL.md,run.cjs}`（参考 meta-audit 结构）
+  - a4-planner composedPhases 默认插 code-review
+  - helix PHASES_DEFAULT + 软兼容
+  - README 图 2/3 + Skills 全览表加 code-review
+- 📌 **教训**：用户说"没有 X"时，先核对现状再问 → 50% 的情况是有但命名/位置不显眼，30% 是真有缺口，剩下才是新需求。这次是混合：有(security+quality)+ 缺(performance) + 命名不显眼 → 决策落点用户拍板
+
+---
+
+## 2026-5-8
+
+### 会话 29：Win→Mac 迁移 + GateGuard 拦截修复
+
+- 🧠 **触发**：Alex 在 mac 上重开项目，发现每次 Bash/Write 都被 ECC 插件的 `gateguard-fact-force` hook 拦下要求"先陈述事实"。同时项目里还有 Win-only 残留没清。
+- 🔧 **GateGuard 处理**：
+  - 定位：`~/.claude/plugins/marketplaces/everything-claude-code/scripts/hooks/gateguard-fact-force.js` + 同插件 `hooks/hooks.json` 自注册（不在用户 settings 里）
+  - 修复：`~/.claude/settings.json` 顶层加 `env: {"ECC_GATEGUARD": "off"}`；同时删掉误放在 `permissions` 里的 Win-only `CLAUDE_CODE_USE_POWERSHELL_TOOL: "1"`
+  - 验证：`rm -rf` 等会触发 `DESTRUCTIVE_BASH` 正则的命令、新文件 Write 全部直接放行，hook 进 `isGateGuardDisabled()` 提前 return
+- 🛠 **跨平台改动**（仅活跃文件，不动历史日志）：
+  - `_meta/e2e-fixtures/01-simple-task.json` `project_dir`：`E:\\ai\\study\\person\\Alex-harness` → `/Users/a1234/person/ai/study/Alex-harness`
+  - `skills/session-reporter/SKILL.md` Stop hook 示例：写死 `node "E:\..."` → `node "$CLAUDE_PROJECT_DIR/.claude/skills/session-reporter/run.cjs"`（跨 Win/Mac/Linux 通用）
+  - **补充（cleanup worker，2026-5-8）**：
+    - `CLAUDE.md` 第 6 行"工作目录"`E:\ai\study\person\Alex-harness\` → `/Users/a1234/person/ai/study/Alex-harness/`，并标注"2026-5-8 Win → mac 迁，4-28 在 Win 下从 …\harness\ 重命名"作为历史
+    - `CLAUDE.md` §"目录变迁备忘"段：第一行"当前工作目录"改为 mac 路径；memory 链追加 `~/.claude/projects/-Users-a1234-person-ai-study-Alex-harness/memory/` 作为当前项；末尾加 "2026-5-8 迁 mac" 一行说明（历史 Win 链作为事实保留，未删）
+    - `CLAUDE.md` §8 铁律"Windows 路径里的 `\` 在 JSON 字符串中必须转义"段未动（按 prompt 要求保留为教训记录）
+    - 删除 `_meta/feishu-pr-auto-config.md`（整篇 PowerShell + schtasks + 引用 v0.7.1 已删的 `dashboard\server.js`，双重过时）
+    - 全项目 grep 兜底（活跃文件，排除 _meta 历史日志 / design / .git / node_modules）：`E:\\` / `powershell` / `schtasks` / `.bat` / `.ps1` / `cmd.exe` / `CLAUDE_CODE_USE_POWERSHELL` / `path.win32` 全部 0 命中，干净
+  - 🔲 **未碰，留 Alex 决定**：`.claude/settings.local.json` 的 `permissions.allow` 内还有 4 条 Win 路径（`C:/Users/Administrator/...` 和 `E:/ai/study/...`）；属用户主权 + 上次 self-modification 被安全闸阻断有先例，没自动改
+- 🔲 **遗留待 Alex 拍板**：
+  - `CLAUDE.md` §目录变迁备忘 + 第 6 行/第 10 行的"工作目录"还写 `E:\ai\study\person\Alex-harness\`（用户主权区）
+  - `_meta/feishu-pr-auto-config.md` 整篇 PowerShell + `schtasks` + 引用已在 v0.7.1 删除的 `dashboard\server.js`，双重过时——建议直接删
+- 🔐 **顺手处理**：Alex 在对话开头贴出真实 GitHub PAT（`ghp_mu2W...`）→ 立即提醒并已吊销 → 改用 `gh auth login` 设备码流程，账号 `Alex-nx-netizen`，token 进 macOS keyring
+- 📌 **教训**：跨平台 hook 配置示例不能写绝对路径；Claude Code 的 settings.json `env` 块对运行中会话的 Bash 子进程**也立刻生效**（无需重启），但在 hook 自身缓存的状态/路径相关变量仍按启动时计算
+
+---
+
 ## 2026-5-6
 
 ### 会话 28：v0.7.1 — 移除 dashboard（无价值，节省 token）
