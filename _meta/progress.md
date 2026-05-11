@@ -21,11 +21,20 @@
   - 失败处理：soft（findings 进 PR 描述），不卡 finalize
   - 输入/输出 schema 骨架已写，subagent 派遣模式跟 meta-audit 一样（脚本不真的派，LLM 主进程派）
   - **6 个开放决策点等 Alex 拍板**：并存 vs 替换 meta-audit / 触发时机 / 维度数 / 失败硬度 / 是否引入语言专属 reviewer / 是否默认 opt-in
-- 🔲 **下一步**（等 Alex 回 Q1-Q6 再动）：
-  - 实现 `skills/code-review/{SKILL.md,run.cjs}`（参考 meta-audit 结构）
-  - a4-planner composedPhases 默认插 code-review
-  - helix PHASES_DEFAULT + 软兼容
-  - README 图 2/3 + Skills 全览表加 code-review
+- ✅ **Alex 拍板"全按草案推荐进行"** → v0.7.2 落地：
+  - `skills/code-review/SKILL.md`：5 维评分 / 4 类 subagent 派遣建议 / 与 a6/meta-audit 边界表
+  - `skills/code-review/run.cjs`：5 维（quality/security/performance/readability/testability）0-5 校验、阈值 ≥20 ok / 12-19 has_recommendations / <12 soft_blocked；schema 错误也 soft_fail=true；上报 helix + 自留底
+  - `skills/helix/run.cjs`：PHASES_DEFAULT 插 code-review 在 a5-executor 之后、a6-validator 之前；新增 `SOFT_PHASES = ["code-review"]` 白名单；cmdFinalize 拆 `blockingReports` vs `softFailures`；finalEntry 加 `soft_failures[]`；phase_report 捕获 code-review score + has_recommendations
+  - `skills/helix/SKILL.md`：phase 表新增 Step 8.5 行
+  - `skills/a4-planner/run.cjs`：composePhasesByType 在 feature/refactor/bugfix/默认链都插入 code-review
+  - `.claude-plugin/plugin.json`：bump 0.7.1 → 0.7.2，description 加 code-review
+  - `README.md`：标题 v0.7.2 + 一句话讲清楚改 10 phase + 图 1 节奏层加 code-review + 图 2 加 Step 8.5 节点 + 三层防护对比表 + 图 3 加 code-review 业务元 + code-review×meta-audit×a6 三层防护子图 + 图 4 sequenceDiagram 加 CR participant + Skills 全览表加 code-review 行 + 项目结构 + 里程碑 v0.7.2 行
+- ✅ **端到端冒烟**：
+  - `node skills/code-review/run.cjs '{}'` → schema 错 soft_fail=true ✅
+  - 完整 5 维输入 → score 19/25，has_recommendations=true，suggested_next 文案正确 ✅
+  - `a4-planner` type=feature → composedPhases=10 含 code-review ✅
+  - `helix --start` 输出 phases 含 code-review @ step 8.5 ✅
+  - **关键**：helix --finalize 端到端：code-review passes=false + a6 passes=true → `promise=COMPLETE`，`failed_phases=[]`，`soft_failures=["code-review"]`，warnings 含 "soft-fail phases (advisory, user decides): code-review" ✅
 - 📌 **教训**：用户说"没有 X"时，先核对现状再问 → 50% 的情况是有但命名/位置不显眼，30% 是真有缺口，剩下才是新需求。这次是混合：有(security+quality)+ 缺(performance) + 命名不显眼 → 决策落点用户拍板
 
 ---
@@ -858,3 +867,4 @@
 - failed: meta-audit, meta-audit
 - task: v0.7 大升级：dashboard 加固(resolveProjectRoot 拒绝plugin cache + 启动自检) + F-025 finding + Tier1[meta-audit phase + 4维评分 + 接入4 lonely skill + live-events 加 helix_run_id] + Tier2[Manager-Worker 二层 + phase链动态 + SOUL.md] + Tier3[per-phase model + HEARTBEAT cron] + 4 项独立洞[helix-runs轮转 / --finalize-session / mode-router config / E2E 回归]
 - started → finished: 2026-5-4 00:17:15 → 2026-5-4 01:40:47
+

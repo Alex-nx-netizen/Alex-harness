@@ -59,6 +59,7 @@ node skills/helix/run.cjs --start "<用户的任务描述>"
 | 5.7 | `node skills/mode-router/run.cjs --fine '{"task":"...","files_changed_count":N,"steps_count":N}'` （**100% 精确硬契约**，见 §2.7）| 永不跳过 |
 | 7 | **用户确认 plan + mode**（不跳过；Ralph 反对自宣告完成）|
 | 8 | `node skills/a5-executor/run.cjs '{"plan":...,"user_confirmed":true,"preferred_skills":[...],"skills_used":[...],"mode":"<solo\|team>","team_type":"<subagent\|peer_review>","subagent_run_ids":[...]}'` | 仅 research 类任务可跳 |
+| 8.5 | `node skills/code-review/run.cjs '<input-json>'`（**v0.7.2 新增**：先调 code-reviewer + security-reviewer + performance-optimizer + 语言专属 reviewer subagent 拿 **5 维评分**（quality·security·**performance**·readability·testability）+ findings，再喂给本脚本。**soft 失败**：passes=false 不卡 finalize，进 `soft_failures[]`）| `composedPhases` 不含或纯文档/研究任务可跳 |
 | 9 | `node skills/a6-validator/run.cjs '{"score":{...}}'` | 仅纯文档任务可跳 |
 | 9.5 | `node skills/meta-audit/run.cjs '<input-json>'`（**v0.7 新增**：先调 code-reviewer + security-reviewer subagent 拿 4 维评分 + findings，再喂给本脚本）| `composedPhases` 不含或纯文档任务可跳 |
 | 10 | `node skills/a7-explainer/run.cjs` | 无变更可跳 |

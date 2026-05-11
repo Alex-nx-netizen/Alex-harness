@@ -1,7 +1,7 @@
 {
   "name": "alex-harness",
-  "version": "0.7.1",
-  "description": "Personal SDLC harness — /helix is the only entrypoint, orchestrating a1-a8 + meta-audit phases under a Ralph passes contract. v0.7 adds embedded meta-audit, 4-dim 0-5 scoring, dynamic phase chains, Manager-Worker team plans, and SOUL.md long-term memory.",
+  "version": "0.7.2",
+  "description": "Personal SDLC harness — /helix is the only entrypoint, orchestrating a1-a8 + code-review + meta-audit phases under a Ralph passes contract. v0.7.2 adds code-review quality phase (5-dim 0-25: quality/security/performance/readability/testability) at Step 8.5 with soft-fail semantics, alongside meta-audit's binary gate at Step 9.5.",
   "author": {
     "name": "Alex-nx-netizen",
     "url": "https://github.com/Alex-nx-netizen"

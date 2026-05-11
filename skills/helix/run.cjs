@@ -28,6 +28,7 @@ const PROGRESS_MD = path.join(META_DIR, "progress.md");
 // helix 编排默认 phase 顺序（a8 按需 inject，不固定列；a3 retriever 也按需触发）
 // v0.6：mode-router 进主链——0.5 粗判 + 5.7 细判（100% 精确硬契约）
 // v0.7：meta-audit 进主链（Step 9.5，a6 之后、a7 之前）；治理元 PHASES_GOVERNANCE 软约束接入
+// v0.7.2：code-review 进主链（Step 8.5，a5 之后、a6 之前）；SOFT_PHASES 软失败白名单
 const PHASES_DEFAULT = [
   "mode-router-coarse",
   "a1-task-understander",
@@ -35,10 +36,15 @@ const PHASES_DEFAULT = [
   "a4-planner",
   "mode-router-fine",
   "a5-executor",
+  "code-review",
   "a6-validator",
   "meta-audit",
   "a7-explainer",
 ];
+
+// v0.7.2：失败语义为「软」的 phase——passes=false 不进 failed_phases，仅进 soft_failures + warnings
+// 用户对这些 phase 的失败有最终决定权（不自动 NOT_COMPLETE）
+const SOFT_PHASES = ["code-review"];
 
 // v0.7 治理元（默认在主链跑；finalize 时缺失只警告不卡）
 //   evolution-tracker：每次 finalize 前跑一次趋势分析（可缺）
@@ -210,6 +216,11 @@ function cmdReport(phase, jsonStr) {
   if (phase === "meta-audit" && payload.output && payload.output.score) {
     entry.score = payload.output.score;
   }
+  // v0.7.2：code-review 的 score 字段抓到 phase report，便于 evolution-tracker 长期分析
+  if (phase === "code-review" && payload.output && payload.output.score) {
+    entry.score = payload.output.score;
+    entry.has_recommendations = payload.output.has_recommendations === true;
+  }
   safeAppend(HELIX_RUNS, entry);
   state.phase_reports.push({
     phase,
@@ -229,9 +240,19 @@ function cmdFinalize() {
     process.exit(1);
   }
   const reports = state.phase_reports || [];
+  // v0.7.2：SOFT_PHASES（如 code-review）失败不计入 allPasses；只进 soft_failures + warnings
+  const blockingReports = reports.filter(
+    (r) => !SOFT_PHASES.includes(r.phase),
+  );
+  const softFailures = reports
+    .filter((r) => SOFT_PHASES.includes(r.phase) && !r.passes)
+    .map((r) => r.phase);
   const allPasses =
-    reports.length > 0 && reports.every((r) => r.passes === true);
-  const failed = reports.filter((r) => !r.passes).map((r) => r.phase);
+    blockingReports.length > 0 &&
+    blockingReports.every((r) => r.passes === true);
+  const failed = blockingReports
+    .filter((r) => !r.passes)
+    .map((r) => r.phase);
   const promise = allPasses ? "COMPLETE" : "NOT_COMPLETE";
 
   // v0.7 B3：治理元软约束——若 PHASES_GOVERNANCE 没跑过，警告但不卡 promise
@@ -260,6 +281,11 @@ function cmdFinalize() {
       `a4 composedPhases missing (soft): ${composedMissing.join(", ")}`,
     );
   }
+  if (softFailures.length > 0) {
+    warnings.push(
+      `soft-fail phases (advisory, user decides): ${softFailures.join(", ")}`,
+    );
+  }
 
   const finalEntry = {
     helix_run_id: state.helix_run_id,
@@ -269,6 +295,7 @@ function cmdFinalize() {
     passes_all: allPasses,
     phases_run: reports.length,
     failed_phases: failed,
+    soft_failures: softFailures,
     composedPhases: composedPhases || null,
     governance_missing: governanceMissing,
     composed_missing: composedMissing,

@@ -2,7 +2,7 @@
 
 > Alex 的私人 SDLC Agent Harness —— 基于 OpenAI Harness Engineering 三部曲 + 元思想，让 Claude 在编程协作中更可控、可观测、可自我进化。
 >
-> **当前版本：v0.7.1**（2026-5-6）· 工作目录：`/Users/a1234/person/ai/study/Alex-harness/`
+> **当前版本：v0.7.2**（2026-5-11，新增 code-review 质量元）· 工作目录：`/Users/a1234/person/ai/study/Alex-harness/`
 
 ---
 
@@ -10,8 +10,8 @@
 
 - [一句话讲清楚](#一句话讲清楚)
 - [图 1：四层元思想架构](#图-1四层元思想架构)
-- [图 2：/helix 9-phase 流程](#图-29-phase-helix-流程)
-- [图 3：14 个 skill 的组织关系](#图-314-个-skill-的组织关系)
+- [图 2：/helix 10-phase 流程](#图-210-phase-helix-流程)
+- [图 3：15 个 skill 的组织关系](#图-315-个-skill-的组织关系)
 - [图 4：一次 run 的数据流](#图-4一次-run-的数据流)
 - [图 5：自进化闭环](#图-5自进化闭环)
 - [安装](#安装)
@@ -26,12 +26,14 @@
 ## 一句话讲清楚
 
 ```
-你说一句话 → /helix 接住 → 9 个 phase 自动跑 → 每步二元 passes 判定
-            → 独立 subagent 审 → 你拍板确认 → 输出 promise=COMPLETE
+你说一句话 → /helix 接住 → 10 个 phase 自动跑 → 每步二元 passes 判定
+            → 4 类 reviewer subagent 独立审（quality/security/perf/readability/testability）
+            → meta-audit 独立二元闸 → 你拍板确认 → 输出 promise=COMPLETE
             → 沉淀到 SOUL.md → 下次更聪明
 ```
 
 **核心赌注**：层级 + 独立评审是真胜负手，单纯并行 agent 效应有限。
+**v0.7.2 新增**：code-review 质量元——专业开发者必备的安全/质量/性能/可读性/可测性 5 维审查，soft 失败不打断节奏。
 
 ---
 
@@ -57,20 +59,21 @@ flowchart TD
 
     META -.对应.-> M1["helix · a8-risk-guard · meta-audit"]:::meta
     MIRROR -.对应.-> M2["a1-task-understander · a2-repo-sensor · a3-retriever"]:::mirror
-    RHYTHM -.对应.-> M3["a4-planner → a5-executor → a6-validator → meta-audit → a7-explainer"]:::rhythm
+    RHYTHM -.对应.-> M3["a4-planner → a5-executor → <b>code-review</b> 🆕<br/>→ a6-validator → meta-audit → a7-explainer"]:::rhythm
     AMP -.对应.-> M4["mode-router · context-curator · evolution-tracker"]:::amp
 ```
 
 ---
 
-## 图 2：9-phase helix 流程
+## 图 2：10-phase helix 流程
 
-> **怎么读**：菱形是决策点，矩形是 phase。红色边框 = 强制人工卡点；虚线 = 可跳过；🛑 = Ralph 二元 passes 关。
+> **怎么读**：菱形是决策点，矩形是 phase。红色边框 = 强制人工卡点；蓝色 = 质量审查；虚线 = 可跳过；🛑 = Ralph 二元 passes 关。**v0.7.2 新增 Step 8.5 code-review 质量元**（专业开发者视角，soft 失败不卡 finalize）。
 
 ```mermaid
 flowchart TD
     classDef phase fill:#f1f5f9,stroke:#475569,stroke-width:1.5px,color:#0f172a
     classDef gate fill:#fef3c7,stroke:#d97706,stroke-width:2.5px,color:#78350f
+    classDef review fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1e3a8a
     classDef audit fill:#fee2e2,stroke:#dc2626,stroke-width:2px,color:#7f1d1d
     classDef done fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#14532d
     classDef optional stroke-dasharray:5 5
@@ -96,34 +99,45 @@ flowchart TD
     S7{{"🛑 Step 7<br/>用户确认 plan + mode"}}:::gate
     S7 --> S8
     S8[["Step 8<br/>a5-executor<br/>5.5 + 5.7 双闭环"]]:::phase
-    S8 --> S9
+    S8 --> S85
+    S85[["🆕 Step 8.5<br/>code-review<br/>5 维评分 0-25<br/>quality·security·perf·readability·testability<br/>soft 失败"]]:::review
+    S85 --> S9
     S9[["Step 9<br/>a6-validator<br/>4 维评分 0-20"]]:::phase
     S9 --> S95
-    S95[["🆕 Step 9.5<br/>meta-audit<br/>独立 subagent 评审"]]:::audit
+    S95[["Step 9.5<br/>meta-audit<br/>独立 subagent 评审<br/>4 维 0-20，二元闸"]]:::audit
     S95 --> S10
     S10[["Step 10<br/>a7-explainer<br/>commit msg + PR 描述"]]:::phase
     S10 --> FIN
-    FIN(["🏁 helix --finalize<br/>promise=COMPLETE | NOT_COMPLETE"]):::done
+    FIN(["🏁 helix --finalize<br/>promise=COMPLETE | NOT_COMPLETE<br/>(code-review soft-fail 不影响)"]):::done
 ```
+
+**三层防护对比**（v0.7.2 起 SDLC 链有 3 个质量关卡）：
+
+| Phase | 谁判 | 维度 | 失败成本 | 关心 |
+|---|---|---|---|---|
+| Step 9 `a6-validator` | 机器（tsc/eslint/test） | 1 维：所有 check 是否过 | **硬**：不修不能合并 | 能不能跑 |
+| Step 8.5 `code-review` 🆕 | LLM subagent ×4 | **5 维**：quality·security·**perf**·readability·testability | **软**：findings 进 PR，不卡 finalize | 怎么改更好 |
+| Step 9.5 `meta-audit` | LLM 独立 subagent | 4 维：correctness·security·maintainability·alignment | 中：12-19 软回 a5，<10 卡 | 值不值得 ship |
 
 **phase 链由 a4 动态决定**：
 
-| 任务类型 | 跳过哪些 phase |
+| 任务类型 | 跑哪些 phase |
 |---|---|
-| `research` / `design` | 跳过 a5-executor / a6-validator / a7-explainer |
-| `feature` / `bugfix` | 跑全 9 phase |
+| `research` / `design` | 跳过 a5/code-review/a6/meta-audit/a7（无代码改动） |
+| `feature` / `refactor` / `bugfix` | **跑全 10 phase**（含 code-review + meta-audit）|
 | `explain` | 只跑 a1 + a3 + a7 |
 
 ---
 
-## 图 3：14 个 skill 的组织关系
+## 图 3：15 个 skill 的组织关系
 
-> **怎么读**：两大块——**业务元**（a1-a8 执行链）和**治理元**（横切，给执行链上锁）。helix 是唯一暴露的入口；其他 13 个不能单独触发。
+> **怎么读**：两大块——**业务元**（SDLC 执行链）和**治理元**（横切，给执行链上锁）。helix 是唯一暴露的入口；其他 14 个不能单独触发。**v0.7.2 起业务元有 3 个质量关卡**：a6（机器）+ code-review（建议）+ meta-audit（二元闸）。
 
 ```mermaid
 flowchart LR
     classDef entry fill:#fde68a,stroke:#b45309,stroke-width:3px,color:#78350f
     classDef sdlc fill:#dbeafe,stroke:#2563eb,stroke-width:1.5px,color:#1e3a8a
+    classDef review fill:#bfdbfe,stroke:#1d4ed8,stroke-width:2.5px,color:#1e3a8a
     classDef audit fill:#fee2e2,stroke:#dc2626,stroke-width:2px,color:#7f1d1d
     classDef gov fill:#fed7aa,stroke:#ea580c,stroke-width:1.5px,color:#7c2d12
     classDef guard fill:#fecaca,stroke:#b91c1c,stroke-width:2px,color:#7f1d1d
@@ -138,12 +152,13 @@ flowchart LR
         A3["a3-retriever<br/>关键词检索"]:::sdlc
         A4["a4-planner<br/>动态 phase 链"]:::sdlc
         A5["a5-executor<br/>5.5 + 5.7 闭环"]:::sdlc
+        CR["🆕 code-review<br/>5 维质量审查<br/>(soft 失败)"]:::review
         A6["a6-validator<br/>4 维评分"]:::sdlc
-        META["meta-audit<br/>🆕 独立审"]:::audit
+        META["meta-audit<br/>独立审 / 二元闸"]:::audit
         A7["a7-explainer<br/>commit + PR"]:::sdlc
         A8["a8-risk-guard<br/>破坏性操作守门"]:::guard
 
-        A1 --> A2 --> A3 --> A4 --> A5 --> A6 --> META --> A7
+        A1 --> A2 --> A3 --> A4 --> A5 --> CR --> A6 --> META --> A7
         A8 -.强制拦截.-> A5
     end
 
@@ -161,6 +176,26 @@ flowchart LR
     GOV -.反向约束.-> BIZ
 ```
 
+### code-review × meta-audit × a6-validator 三层防护
+
+> **怎么读**：业务元里有 **3 个递进的质量关卡**，每个 reviewer 都是独立 subagent，避免自审自荐。
+
+```mermaid
+flowchart LR
+    classDef machine fill:#f1f5f9,stroke:#475569,stroke-width:1.5px,color:#0f172a
+    classDef advisory fill:#bfdbfe,stroke:#1d4ed8,stroke-width:2px,color:#1e3a8a
+    classDef gate fill:#fee2e2,stroke:#dc2626,stroke-width:2px,color:#7f1d1d
+
+    A5["a5-executor<br/>代码改完"]:::machine
+    A5 --> CR
+    CR["🆕 code-review (8.5)<br/>━━━━━━━━━━<br/>quality · security<br/>performance · readability<br/>testability<br/>━━━━━━━━━━<br/>建议 → PR 描述<br/>soft 失败不卡"]:::advisory
+    CR --> A6
+    A6["a6-validator (9)<br/>━━━━━━━━━━<br/>tsc / eslint / test<br/>━━━━━━━━━━<br/>机器判定<br/>hard 失败必修"]:::machine
+    A6 --> MA
+    MA["meta-audit (9.5)<br/>━━━━━━━━━━<br/>correctness · security<br/>maintainability · alignment<br/>━━━━━━━━━━<br/>独立审 / 二元闸<br/>≥16 → ship"]:::gate
+    MA --> SHIP(["🚀 ship / PR"])
+```
+
 ---
 
 ## 图 4：一次 run 的数据流
@@ -176,6 +211,7 @@ sequenceDiagram
     participant A2 as a2-repo
     participant A4 as a4-planner
     participant A5 as a5-exec
+    participant CR as 🆕 code-review
     participant A6 as a6-valid
     participant MA as meta-audit
     participant L as 📒 helix-runs.jsonl
@@ -187,12 +223,15 @@ sequenceDiagram
     H->>A2: 派 RepoContext 任务
     A2-->>H: {tech_stack, dirty, commits}
     H->>A4: TaskCard + RepoContext
-    A4-->>H: PlanDoc + composedPhases[]
+    A4-->>H: PlanDoc + composedPhases[] (含 code-review)
     H->>U: 🛑 plan + mode 求确认
     U-->>H: ✅ 确认
     H->>A5: 执行 plan
-    A5-->>H: passes + skills_check
+    A5-->>H: passes + skills_check + files_changed
     A5->>L: write {type:"phase", passes:true}
+    H->>CR: 派 code-reviewer + security-reviewer + perf-optimizer + 语言专属 subagent
+    CR-->>H: score:{q,s,p,r,t,total:0-25} + findings[] + suggested_next
+    Note over CR,H: soft 失败：findings 进 PR，不卡 finalize
     H->>A6: 自动跑测试 + lint
     A6-->>H: score:{a,c,a,f,total:0-20}
     H->>MA: 派独立 subagent 评审
@@ -275,18 +314,19 @@ node skills/helix/run.cjs --status                 # 查看当前 active run
 
 ## Skills 全览
 
-### 业务元（SDLC 执行链 · a1-a8）
+### 业务元（SDLC 执行链 · a1-a8 + 质量审查 ×2）
 
 | Skill | 职责 | 关键输出 |
 |---|---|---|
-| `helix` | 唯一入口，编排 a1-a8 + meta-audit | `helix-runs.jsonl` 三类行 + `promise: COMPLETE\|NOT_COMPLETE` |
+| `helix` | 唯一入口，编排 a1-a8 + code-review + meta-audit | `helix-runs.jsonl` 三类行 + `promise: COMPLETE\|NOT_COMPLETE` |
 | `a1-task-understander` | 解析任务意图 → TaskCard | `{type, scope, out_of_scope, done_criteria, risk_level, preferred_skills}` |
 | `a2-repo-sensor` | 扫仓库结构、技术栈、commit、dirty | RepoContext JSON |
 | `a3-retriever` | 关键词检索 | `keywords[]` + scope（多数任务可跳） |
 | `a4-planner` | TaskCard 校验 + 输出 `composedPhases[]`（v0.7 动态） | PlanDoc + preferred_skills 透传 |
 | `a5-executor` | 用户确认后执行 + 5.5/5.7 双闭环 | passes + skills_check + mode_check |
+| `code-review` 🆕 v0.7.2 | **专业开发者视角质量审查**：code-reviewer + security-reviewer + performance-optimizer + 语言专属 reviewer 4 类独立 subagent，**5 维评分**（quality·security·**performance**·readability·testability，0-25），soft 失败不卡 finalize | `{score, has_recommendations, by_severity, by_dimension, findings[], suggested_next}` |
 | `a6-validator` | 检测项目类型跑测试/lint + **4 维评分** | `{passes, score:{accuracy,completeness,actionability,format,total:0-20}}` |
-| `meta-audit` 🆕 | **独立 subagent 评审** | `{score:{correctness,security,maintainability,alignment,total:0-20}, findings[]}` |
+| `meta-audit` | **独立 subagent 评审 / 二元闸** | `{score:{correctness,security,maintainability,alignment,total:0-20}, findings[]}` |
 | `a7-explainer` | 生成 commit message / PR 描述 | 英文 commit ≤72 字符 + 中文 PR 描述 |
 | `a8-risk-guard` | 破坏性操作前强制风险评估 | LOW/HIGH/CRITICAL 分级 |
 
@@ -322,13 +362,14 @@ Alex-harness/
 ├── .claude-plugin/
 │   ├── plugin.json                   # 插件清单（v0.7.1）
 │   └── marketplace.json
-├── skills/                           # 14 个 skill（plugin 模式）
+├── skills/                           # 15 个 skill（plugin 模式）
 │   ├── helix/                        # 唯一入口
 │   ├── a1-task-understander/
 │   ├── a2-repo-sensor/
 │   ├── a3-retriever/
-│   ├── a4-planner/
+│   ├── a4-planner/                   # composedPhases 默认含 code-review
 │   ├── a5-executor/
+│   ├── code-review/                  # v0.7.2 新增：5 维质量审查（soft 失败）
 │   ├── a6-validator/
 │   ├── a7-explainer/
 │   ├── a8-risk-guard/
@@ -369,7 +410,8 @@ Alex-harness/
 | **v0.6** | mode-router 双阶段路由 + 5.7 100% 精确硬契约 | ✅ 2026-5-3 |
 | **v0.7** | meta-audit + 4 维评分 + Manager-Worker + SOUL.md | ✅ 2026-5-4 |
 | **v0.7.1** | 移除 dashboard（无价值，节省 token） | ✅ 2026-5-6 |
-| v0.8 | 真实项目验证 + meta-audit 实战 5-10 次 + SOUL.md 沉淀 | 🔲 进行中 |
+| **v0.7.2** 🆕 | **code-review 质量元**：5 维 0-25（quality·security·**performance**·readability·testability）· 4 类独立 subagent · Step 8.5 soft 失败 · helix SOFT_PHASES 白名单 · a4 composedPhases 默认含 | ✅ 2026-5-11 |
+| v0.8 | 真实项目验证 + code-review/meta-audit 实战 5-10 次 + SOUL.md 沉淀 | 🔲 进行中 |
 
 ---
 

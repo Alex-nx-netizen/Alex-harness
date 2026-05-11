@@ -51,6 +51,7 @@ function composePhasesByType(type) {
       "a4-planner",
       "mode-router-fine",
       "a5-executor",
+      "code-review", // v0.7.2: 质量元（专业开发者视角），soft 失败
       "a6-validator",
       "meta-audit",
       "a7-explainer",
@@ -64,6 +65,7 @@ function composePhasesByType(type) {
     "a4-planner",
     "mode-router-fine",
     "a5-executor",
+    "code-review", // v0.7.2: 同上
     "a6-validator",
     "meta-audit",
     "a7-explainer",
