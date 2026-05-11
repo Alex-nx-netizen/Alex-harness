@@ -74,11 +74,11 @@ node .claude/skills/session-reporter/run.cjs --reset
 
 ## §5 触发配置（Stop hook）
 
-在 `.claude/settings.local.json` 的 `hooks.Stop` 加：
+在 `.claude/settings.local.json` 的 `hooks.Stop` 加（用 `$CLAUDE_PROJECT_DIR`，跨 Win/Mac/Linux 都能跑）：
 ```json
 {
   "type": "command",
-  "command": "node \"E:\\ai\\study\\person\\Alex-harness\\.claude\\skills\\session-reporter\\run.cjs\""
+  "command": "node \"$CLAUDE_PROJECT_DIR/.claude/skills/session-reporter/run.cjs\""
 }
 ```
 

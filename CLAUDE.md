@@ -3,17 +3,19 @@
 > 这是Alex的私人 agent harness 项目。
 > 目标：基于 OpenAI Harness Engineering 三部曲 + 元思想，搭建属于自己的 agent harness。
 > 状态：v0.1（蓝图已整合，进入 Phase 1 / M1），持续迭代。
-> 工作目录：`E:\ai\study\person\Alex-harness\`（2026-4-28 从 `E:\ai\study\person\harness\` 重命名）
+> 工作目录：`/Users/a1234/person/ai/study/Alex-harness/`（2026-5-8 从 Win `E:\ai\study\person\Alex-harness\` 迁 mac；4-28 在 Win 下从 `E:\ai\study\person\harness\` 重命名）
 
 ## 📌 目录变迁备忘（v0.1 → v0.2 之间，验证后可删）
 
-- **当前工作目录**：`E:\ai\study\person\Alex-harness\`
+- **当前工作目录**：`/Users/a1234/person/ai/study/Alex-harness/`（mac）
 - **memory 路径变迁链**（每次目录改名都要 cp 一次）：
-  - `~/.claude/projects/E--ai-study-person/memory/` → 起源
-  - `~/.claude/projects/E--ai-study-person-harness/memory/` → 4-28 第一次迁
-  - `~/.claude/projects/E--ai-study-person-Alex-harness/memory/` → **当前**（4-28 第二次迁，会话 8 完成 cp）
+  - `~/.claude/projects/E--ai-study-person/memory/` → 起源（Win）
+  - `~/.claude/projects/E--ai-study-person-harness/memory/` → 4-28 Win 下第一次迁
+  - `~/.claude/projects/E--ai-study-person-Alex-harness/memory/` → 4-28 Win 下第二次迁（会话 8 完成 cp）
+  - `~/.claude/projects/-Users-a1234-person-ai-study-Alex-harness/memory/` → **当前**（2026-5-8 Win → mac 迁；如 mac 端无对应 memory 目录，下次会话需手动 cp）
 - **knowledge-curator 项目级副本**位于 `.claude/skills/knowledge-curator/`（含 logs/runs.jsonl，3 条记录）；**全局 skill** 位于 `~/.claude/skills/knowledge-curator/`，两者目前可能 logs 不同步——后续单 source-of-truth 决策看 M2/M3。
 - **教训**：每次重命名工作目录都要手动 cp memory，因为 Claude Code 按目录路径生成新 memory 目录名，不会自动迁移。
+- **2026-5-8 迁 mac**：Alex 在 mac 重开项目，活跃文件 Win 路径已批量替换为 mac 路径（见 `_meta/progress.md` 会话 29）；本"目录变迁备忘"段历史链保留作为事实记录，未删。
 
 ## 项目定位
 
