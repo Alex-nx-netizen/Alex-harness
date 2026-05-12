@@ -1,0 +1,21 @@
+{
+  "fixture_id": "03-team-mode",
+  "task": "v0.8 dogfood: 大型 refactor → mode-router-fine 输出 team/manager_worker → 5.7 闭环",
+  "task_card": {
+    "type": "refactor",
+    "scope": "前端 + 后端 同时重构 OAuth",
+    "done_criteria": ["前后端解耦", "兼容旧 token"]
+  },
+  "synthetic_phases": {
+    "a1-task-understander": { "passes": true },
+    "a2-repo-sensor": { "passes": true },
+    "a4-planner": { "passes": true },
+    "mode-router-fine": { "passes": true, "files_changed_count": 12, "steps_count": 15 },
+    "a5-executor": { "passes": true, "mode": "team", "team_type": "subagent", "subagent_run_ids": ["mgr-001", "wkr-002", "wkr-003"] },
+    "code-review": { "passes": true, "score": { "quality": 4, "security": 5, "performance": 4, "readability": 4, "testability": 4 } },
+    "a6-validator": { "passes": true, "score": { "accuracy": 4, "completeness": 5, "actionability": 4, "format": 5 } },
+    "meta-audit": { "passes": true, "score": { "correctness": 5, "security": 5, "maintainability": 4, "alignment_with_plan": 5 } },
+    "a7-explainer": { "passes": true }
+  },
+  "expected_promise": "COMPLETE"
+}

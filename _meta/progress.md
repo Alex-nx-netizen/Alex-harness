@@ -868,3 +868,106 @@
 - task: v0.7 大升级：dashboard 加固(resolveProjectRoot 拒绝plugin cache + 启动自检) + F-025 finding + Tier1[meta-audit phase + 4维评分 + 接入4 lonely skill + live-events 加 helix_run_id] + Tier2[Manager-Worker 二层 + phase链动态 + SOUL.md] + Tier3[per-phase model + HEARTBEAT cron] + 4 项独立洞[helix-runs轮转 / --finalize-session / mode-router config / E2E 回归]
 - started → finished: 2026-5-4 00:17:15 → 2026-5-4 01:40:47
 
+
+### /helix run 2026-5-12-213957 · "v0.8 dogfood: 模拟成功的 feature 任务（5 维 score 真实数据）"
+- promise: **COMPLETE**
+- phases: a1✅ a2✅ a4✅ mode✅ a5✅ code✅ a6✅ meta✅ a7✅
+- task: v0.8 dogfood: 模拟成功的 feature 任务（5 维 score 真实数据）
+- started → finished: 2026-5-12 21:39:57 → 2026-5-12 21:39:58
+
+### /helix run 2026-5-12-213958 · "v0.8 dogfood: a6 测试失败 → promise=NOT_COMPLETE → 验证 #9 失败日志"
+- promise: **NOT_COMPLETE**
+- phases: a1✅ a2✅ a4✅ mode✅ a5✅ code✅ a6❌ meta✅ a7✅
+- failed: a6-validator
+- task: v0.8 dogfood: a6 测试失败 → promise=NOT_COMPLETE → 验证 #9 失败日志
+- started → finished: 2026-5-12 21:39:58 → 2026-5-12 21:39:59
+
+## ❌ helix-run-2026-5-12-213958 NOT_COMPLETE
+- phase: a6-validator
+- reason: a6-validator=passes_false
+- 已修: 否
+- 复盘 link: 待写（findings.md F-NNN 或 progress.md 同会话）
+- task: v0.8 dogfood: a6 测试失败 → promise=NOT_COMPLETE → 验证 #9 失败日志
+
+### /helix run 2026-5-12-213959 · "v0.8 dogfood: 大型 refactor → mode-router-fine 输出 team/manager_worker → 5.7 闭环"
+- promise: **COMPLETE**
+- phases: a1✅ a2✅ a4✅ mode✅ a5✅ code✅ a6✅ meta✅ a7✅
+- task: v0.8 dogfood: 大型 refactor → mode-router-fine 输出 team/manager_worker → 5.7 闭环
+- started → finished: 2026-5-12 21:39:59 → 2026-5-12 21:39:59
+
+### /helix run 2026-5-12-213959 · "v0.8 dogfood: code-review 软失败 → SOFT_PHASES 白名单不卡 promise → 仍 COMPLETE"
+- promise: **COMPLETE**
+- phases: a1✅ a2✅ a4✅ mode✅ a5✅ code❌ a6✅ meta✅ a7✅
+- task: v0.8 dogfood: code-review 软失败 → SOFT_PHASES 白名单不卡 promise → 仍 COMPLETE
+- started → finished: 2026-5-12 21:39:59 → 2026-5-12 21:40:00
+
+### /helix run 2026-5-12-214000 · "v0.8 dogfood: a6 全 4 分（uniform_suspect）+ meta-audit 默认兜底 → 验证 #3 score 真实化警告"
+- promise: **COMPLETE**
+- phases: a1✅ a2✅ a4✅ mode✅ a5✅ code✅ a6✅ meta✅ a7✅
+- task: v0.8 dogfood: a6 全 4 分（uniform_suspect）+ meta-audit 默认兜底 → 验证 #3 score 真实化警告
+- started → finished: 2026-5-12 21:40:00 → 2026-5-12 21:40:01
+
+### /helix run 2026-5-12-214030 · "v0.8 dogfood: 模拟成功的 feature 任务（5 维 score 真实数据）"
+- promise: **COMPLETE**
+- phases: a1✅ a2✅ a4✅ mode✅ a5✅ code✅ a6✅ meta✅ a7✅
+- task: v0.8 dogfood: 模拟成功的 feature 任务（5 维 score 真实数据）
+- started → finished: 2026-5-12 21:40:30 → 2026-5-12 21:40:31
+
+### /helix run 2026-5-12-214031 · "v0.8 dogfood: a6 测试失败 → promise=NOT_COMPLETE → 验证 #9 失败日志"
+- promise: **NOT_COMPLETE**
+- phases: a1✅ a2✅ a4✅ mode✅ a5✅ code✅ a6❌ meta✅ a7✅
+- failed: a6-validator
+- task: v0.8 dogfood: a6 测试失败 → promise=NOT_COMPLETE → 验证 #9 失败日志
+- started → finished: 2026-5-12 21:40:31 → 2026-5-12 21:40:32
+
+## ❌ helix-run-2026-5-12-214031 NOT_COMPLETE
+- phase: a6-validator
+- reason: a6-validator=passes_false
+- 已修: 否
+- 复盘 link: 待写（findings.md F-NNN 或 progress.md 同会话）
+- task: v0.8 dogfood: a6 测试失败 → promise=NOT_COMPLETE → 验证 #9 失败日志
+
+### /helix run 2026-5-12-214032 · "v0.8 dogfood: 大型 refactor → mode-router-fine 输出 team/manager_worker → 5.7 闭环"
+- promise: **COMPLETE**
+- phases: a1✅ a2✅ a4✅ mode✅ a5✅ code✅ a6✅ meta✅ a7✅
+- task: v0.8 dogfood: 大型 refactor → mode-router-fine 输出 team/manager_worker → 5.7 闭环
+- started → finished: 2026-5-12 21:40:32 → 2026-5-12 21:40:32
+
+### /helix run 2026-5-12-214032 · "v0.8 dogfood: code-review 软失败 → SOFT_PHASES 白名单不卡 promise → 仍 COMPLETE"
+- promise: **COMPLETE**
+- phases: a1✅ a2✅ a4✅ mode✅ a5✅ code❌ a6✅ meta✅ a7✅
+- task: v0.8 dogfood: code-review 软失败 → SOFT_PHASES 白名单不卡 promise → 仍 COMPLETE
+- started → finished: 2026-5-12 21:40:32 → 2026-5-12 21:40:33
+
+### /helix run 2026-5-12-214033 · "v0.8 dogfood: a6 全 4 分（uniform_suspect）+ meta-audit 默认兜底 → 验证 #3 score 真实化警告"
+- promise: **COMPLETE**
+- phases: a1✅ a2✅ a4✅ mode✅ a5✅ code✅ a6✅ meta✅ a7✅
+- task: v0.8 dogfood: a6 全 4 分（uniform_suspect）+ meta-audit 默认兜底 → 验证 #3 score 真实化警告
+- started → finished: 2026-5-12 21:40:33 → 2026-5-12 21:40:34
+
+### /helix run 2026-5-12-214100 · "test SOUL inject"
+- promise: **NOT_COMPLETE**
+- phases: (none reported)
+- task: test SOUL inject
+- started → finished: 2026-5-12 21:41:00 → 2026-5-12 21:41:00
+
+## ❌ helix-run-2026-5-12-214100 NOT_COMPLETE
+- phase: (unknown)
+- reason: (no phase report)
+- 已修: 否
+- 复盘 link: 待写（findings.md F-NNN 或 progress.md 同会话）
+- task: test SOUL inject
+
+### /helix run 2026-5-12-214117 · "test #10 hash mutation"
+- promise: **NOT_COMPLETE**
+- phases: a4✅ a5❌
+- failed: a5-executor
+- task: test #10 hash mutation
+- started → finished: 2026-5-12 21:41:17 → 2026-5-12 21:41:18
+
+## ❌ helix-run-2026-5-12-214117 NOT_COMPLETE
+- phase: a5-executor
+- reason: a5-executor=passes_false
+- 已修: 否
+- 复盘 link: 待写（findings.md F-NNN 或 progress.md 同会话）
+- task: test #10 hash mutation

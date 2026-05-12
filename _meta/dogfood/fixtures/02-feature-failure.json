@@ -1,0 +1,22 @@
+{
+  "fixture_id": "02-feature-failure",
+  "task": "v0.8 dogfood: a6 测试失败 → promise=NOT_COMPLETE → 验证 #9 失败日志",
+  "task_card": {
+    "type": "bugfix",
+    "scope": "修支付死锁",
+    "done_criteria": ["测试通过", "无回归"]
+  },
+  "synthetic_phases": {
+    "a1-task-understander": { "passes": true },
+    "a2-repo-sensor": { "passes": true },
+    "a4-planner": { "passes": true },
+    "mode-router-fine": { "passes": true, "files_changed_count": 1, "steps_count": 2 },
+    "a5-executor": { "passes": true, "mode": "solo" },
+    "code-review": { "passes": true, "score": { "quality": 3, "security": 4, "performance": 4, "readability": 3, "testability": 2 } },
+    "a6-validator": { "passes": false, "errors": ["pytest_failed"] },
+    "meta-audit": { "passes": true, "score": { "correctness": 4, "security": 4, "maintainability": 4, "alignment_with_plan": 5 } },
+    "a7-explainer": { "passes": true }
+  },
+  "expected_promise": "NOT_COMPLETE",
+  "expected_failure_log": true
+}

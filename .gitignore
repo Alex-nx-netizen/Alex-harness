@@ -30,3 +30,6 @@ _meta/heartbeat.log
 
 # v0.7 archive (rotation output)
 _meta/archive/
+
+# v0.8 dogfood suite report (regenerated each run)
+_meta/dogfood/last-suite-report.json

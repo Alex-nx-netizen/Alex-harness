@@ -87,12 +87,25 @@ function validateAuditReport(auditReport) {
 function computeScore(dims) {
   const score = {};
   let total = 0;
+  let fallbackCount = 0;
   for (const d of DIMENSIONS) {
-    const v = typeof dims[d] === "number" ? dims[d] : 0;
+    const provided = typeof dims[d] === "number";
+    const v = provided ? dims[d] : 0;
+    if (!provided) fallbackCount += 1;
     score[d] = v;
     total += v;
   }
   score.total = total;
+  // v0.8 #3：score 真实化 — 标记来源 + uniform 检测
+  const vals = DIMENSIONS.map((d) => score[d]);
+  const uniform = vals.every((v) => v === vals[0]);
+  score._source =
+    fallbackCount === DIMENSIONS.length
+      ? "default_fallback"
+      : fallbackCount > 0
+      ? "partial_fallback"
+      : "llm_provided";
+  score._uniform_suspect = uniform;
   return score;
 }
 

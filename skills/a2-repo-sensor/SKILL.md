@@ -9,6 +9,11 @@ metadata:
     TREE_DEPTH: 3
     COMMIT_LOOKBACK: 10
     IGNORE_DIRS: ["node_modules", ".git", "dist", "build", ".next", "target"]
+alex_harness_v08: true
+harness_role: business_meta
+model_recommendation: sonnet
+runs_in: ["main"]
+tools_required: ["Bash", "Read", "Glob", "Grep"]
 ---
 
 # A2 repo-sensor — 仓库感知元

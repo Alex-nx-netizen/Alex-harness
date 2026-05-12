@@ -1,7 +1,7 @@
 {
   "name": "alex-harness",
-  "version": "0.7.2",
-  "description": "Personal SDLC harness — /helix is the only entrypoint, orchestrating a1-a8 + code-review + meta-audit phases under a Ralph passes contract. v0.7.2 adds code-review quality phase (5-dim 0-25: quality/security/performance/readability/testability) at Step 8.5 with soft-fail semantics, alongside meta-audit's binary gate at Step 9.5.",
+  "version": "0.8.0",
+  "description": "Personal SDLC harness — /helix is the only entrypoint, orchestrating a1-a8 + code-review + meta-audit phases under a Ralph passes contract. v0.8 completes Ralph (failure log + SOUL inject + task_card hash lock), adds OTLP exporter + grep repo-map + dogfood suite, drops a3-retriever and mode-router-coarse from default chain.",
   "author": {
     "name": "Alex-nx-netizen",
     "url": "https://github.com/Alex-nx-netizen"

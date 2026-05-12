@@ -1,0 +1,22 @@
+{
+  "fixture_id": "01-feature-success",
+  "task": "v0.8 dogfood: 模拟成功的 feature 任务（5 维 score 真实数据）",
+  "task_card": {
+    "type": "feature",
+    "scope": "添加 dark mode 切换",
+    "done_criteria": ["按钮可点击", "状态持久化", "无控制台错误"],
+    "preferred_skills": []
+  },
+  "synthetic_phases": {
+    "a1-task-understander": { "passes": true },
+    "a2-repo-sensor": { "passes": true },
+    "a4-planner": { "passes": true, "score_source": "llm_provided" },
+    "mode-router-fine": { "passes": true, "files_changed_count": 2, "steps_count": 3 },
+    "a5-executor": { "passes": true, "mode": "solo" },
+    "code-review": { "passes": true, "score": { "quality": 4, "security": 5, "performance": 3, "readability": 5, "testability": 3 } },
+    "a6-validator": { "passes": true, "score": { "accuracy": 5, "completeness": 4, "actionability": 4, "format": 5 } },
+    "meta-audit": { "passes": true, "score": { "correctness": 5, "security": 4, "maintainability": 5, "alignment_with_plan": 5 } },
+    "a7-explainer": { "passes": true }
+  },
+  "expected_promise": "COMPLETE"
+}

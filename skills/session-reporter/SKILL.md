@@ -15,6 +15,11 @@ evolution_signal_keywords:
   - 没收到
 blueprint_ref: §3.B2
 design_ref: design/session-reporter-draft.md v0.1
+alex_harness_v08: true
+harness_role: governance_meta
+model_recommendation: haiku
+runs_in: ["main"]
+tools_required: ["Bash"]
 ---
 
 # session-reporter

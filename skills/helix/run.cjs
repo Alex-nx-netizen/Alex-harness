@@ -17,6 +17,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 const { spawnSync } = require("child_process");
 
 const PROJECT_DIR = process.cwd();
@@ -24,13 +25,17 @@ const META_DIR = path.join(PROJECT_DIR, "_meta");
 const HELIX_RUNS = path.join(META_DIR, "helix-runs.jsonl");
 const HELIX_STATE = path.join(META_DIR, ".helix-current-run.json");
 const PROGRESS_MD = path.join(META_DIR, "progress.md");
+const SOUL_MD = path.join(META_DIR, "SOUL.md");
 
 // helix 编排默认 phase 顺序（a8 按需 inject，不固定列；a3 retriever 也按需触发）
 // v0.6：mode-router 进主链——0.5 粗判 + 5.7 细判（100% 精确硬契约）
 // v0.7：meta-audit 进主链（Step 9.5，a6 之后、a7 之前）；治理元 PHASES_GOVERNANCE 软约束接入
 // v0.7.2：code-review 进主链（Step 8.5，a5 之后、a6 之前）；SOFT_PHASES 软失败白名单
+// v0.8 #11：a3-retriever 默认从主链移除（数据：16 个 run 13 次跳过 = 装饰）；
+//   仍保留文件可手动调（research 类任务）；composedPhases by type 也跟随调整
+// v0.8 #6/#12：mode-router-coarse 默认从主链移除（数据：43 log 99% 自检；fine 已覆盖完整决策）；
+//   保留 --coarse 子命令向后兼容；想跑可手动 `node skills/mode-router/run.cjs --coarse "..."`
 const PHASES_DEFAULT = [
-  "mode-router-coarse",
   "a1-task-understander",
   "a2-repo-sensor",
   "a4-planner",
@@ -102,6 +107,28 @@ function clearState() {
   if (fs.existsSync(HELIX_STATE)) fs.unlinkSync(HELIX_STATE);
 }
 
+// v0.8 #10：task_card 不可变契约——计算稳定 hash（key 排序后再 stringify）
+function stableHash(obj) {
+  if (!obj || typeof obj !== "object") return null;
+  const sorted = (o) => {
+    if (Array.isArray(o)) return o.map(sorted);
+    if (o && typeof o === "object") {
+      return Object.keys(o)
+        .sort()
+        .reduce((acc, k) => {
+          acc[k] = sorted(o[k]);
+          return acc;
+        }, {});
+    }
+    return o;
+  };
+  return crypto
+    .createHash("sha256")
+    .update(JSON.stringify(sorted(obj)))
+    .digest("hex")
+    .slice(0, 16);
+}
+
 // --- subcommands ---
 
 function cmdStart(task) {
@@ -137,11 +164,33 @@ function cmdStart(task) {
     phase_reports: [],
   });
 
+  // v0.8 #5：SOUL.md 自动注入——helix --start 把 SOUL.md 全文塞进 plan 输出
+  // SOUL.md 是跨 run 的稳定行为规则（evolution-tracker --promote-soul --apply 沉淀），
+  // LLM 必须在 a1 之前先读完，作为本次 run 的"宪法"
+  let soulContent = null;
+  let soulNote = null;
+  if (fs.existsSync(SOUL_MD)) {
+    try {
+      soulContent = fs.readFileSync(SOUL_MD, "utf-8");
+      soulNote = `SOUL.md 已注入（${soulContent.length} 字）；LLM 必须将其作为本 run 的不可变行为规则`;
+    } catch (e) {
+      soulNote = `SOUL.md 读取失败：${e.message}`;
+    }
+  } else {
+    soulNote = "SOUL.md 不存在（项目尚未沉淀稳定规则）；evolution-tracker --promote-soul --apply 会创建";
+  }
+
   const plan = {
     helix_run_id,
     promise: "NOT_COMPLETE",
     project_dir: PROJECT_DIR,
+    soul: {
+      present: soulContent !== null,
+      note: soulNote,
+      content: soulContent, // 全文注入，LLM 必读
+    },
     instructions: [
+      "**第一件事**：读上面的 soul.content（若 present=true）作为本 run 不可变行为规则；冲突时 SOUL.md 高于默认行为",
       "你必须严格按 phases 顺序执行；每个 phase 调用对应 run.cjs（脚本会自动 --report 给 helix）",
       "任何 phase passes=false → 立刻暂停 + 报告用户决策；不自动重试（Ralph 反对自宣告）",
       "破坏性操作（git push --force / rm -rf / drop / 改 CI 等）→ 强制 inject a8-risk-guard",
@@ -207,6 +256,27 @@ function cmdReport(phase, jsonStr) {
       );
       entry.composedPhases = state.composedPhases;
     }
+    // v0.8 #10：a4 通过 task_card 校验 → 锁定 task_card hash 到 state
+    // 后续 phase（特别是 a5）若带 task_card，必须 hash 一致；否则视为 task_card_mutated
+    const tc = payload.output.task_card_validated;
+    if (tc && typeof tc === "object") {
+      state.task_card = tc;
+      state.task_card_hash = stableHash(tc);
+      entry.task_card_hash = state.task_card_hash;
+    }
+  }
+  // v0.8 #10：a5-executor 报告时若带 task_card_hash，校验一致性
+  if (phase === "a5-executor" && payload.output && state.task_card_hash) {
+    const submitted = payload.output.task_card_hash;
+    if (submitted && submitted !== state.task_card_hash) {
+      entry.passes = false;
+      entry.errors = [
+        ...(entry.errors || []),
+        "task_card_mutated",
+      ];
+      entry.summary =
+        `🚨 task_card 被篡改（a4 锁定 hash=${state.task_card_hash}, a5 提交 hash=${submitted}）— Ralph 单源契约违反`;
+    }
   }
   // v0.7 B2：a6-validator 的 score 字段抓到 phase report，便于 evolution-tracker 长期分析
   if (phase === "a6-validator" && payload.score) {
@@ -257,7 +327,43 @@ function cmdFinalize() {
 
   // v0.7 B3：治理元软约束——若 PHASES_GOVERNANCE 没跑过，警告但不卡 promise
   const phaseSet = new Set(reports.map((r) => r.phase));
-  const governanceMissing = PHASES_GOVERNANCE.filter((p) => !phaseSet.has(p));
+  let governanceMissing = PHASES_GOVERNANCE.filter((p) => !phaseSet.has(p));
+
+  // v0.8 #2：lonely skill 接入 — finalize 时自动 fire-and-forget 触发缺席的治理元
+  // fail-safe：5s 超时 + 错误捕获，绝不因治理元失败影响 promise
+  // 关闭方式：HARNESS_AUTO_GOVERNANCE=off
+  const autoGovernance = process.env.HARNESS_AUTO_GOVERNANCE !== "off";
+  const governanceResults = [];
+  if (autoGovernance) {
+    for (const gp of governanceMissing.slice()) {
+      const govScript = path.join(PROJECT_DIR, "skills", gp, "run.cjs");
+      if (!fs.existsSync(govScript)) {
+        governanceResults.push({ phase: gp, status: "skip", reason: "script not found" });
+        continue;
+      }
+      try {
+        const r = spawnSync("node", [govScript], {
+          encoding: "utf-8",
+          cwd: PROJECT_DIR,
+          timeout: 8000,
+          env: { ...process.env, HARNESS_PROJECT_ROOT: PROJECT_DIR },
+        });
+        const ok = r.status === 0;
+        governanceResults.push({
+          phase: gp,
+          status: ok ? "ok" : "fail",
+          exit: r.status,
+          stderr_tail: (r.stderr || "").slice(-200),
+        });
+        if (ok) {
+          // 从 missing 列表里去掉
+          governanceMissing = governanceMissing.filter((p) => p !== gp);
+        }
+      } catch (e) {
+        governanceResults.push({ phase: gp, status: "error", error: e.message });
+      }
+    }
+  }
 
   // v0.7 C2：a4-planner composedPhases 决定哪些 phase 必跑
   // 若 state 有 composedPhases，把缺的 phase 列出来（仅警告级，不卡 promise）
@@ -287,6 +393,40 @@ function cmdFinalize() {
     );
   }
 
+  // v0.8 #3：score 真实化警告 — 任何 phase 用了 default_fallback / uniform_suspect → warn
+  // 不卡 promise，但人审看 finalize 输出能立刻发现"这次评分可能没真评"
+  const suspectScores = [];
+  // 重新读最近 N 行 helix-runs.jsonl 拿本 run 的 score 详情
+  try {
+    const tail = fs
+      .readFileSync(HELIX_RUNS, "utf-8")
+      .split(/\r?\n/)
+      .filter(Boolean)
+      .slice(-200)
+      .map((l) => {
+        try {
+          return JSON.parse(l);
+        } catch {
+          return null;
+        }
+      })
+      .filter((o) => o && o.helix_run_id === state.helix_run_id);
+    for (const e of tail) {
+      const s = e.score;
+      if (!s) continue;
+      if (s._source === "default_fallback") {
+        suspectScores.push(`${e.phase}=default_fallback`);
+      } else if (s._uniform_suspect) {
+        suspectScores.push(`${e.phase}=uniform(${s.total})`);
+      }
+    }
+  } catch {}
+  if (suspectScores.length > 0) {
+    warnings.push(
+      `score 真实化嫌疑 (LLM 可能没真评): ${suspectScores.join(", ")}`,
+    );
+  }
+
   const finalEntry = {
     helix_run_id: state.helix_run_id,
     type: "finalize",
@@ -298,6 +438,7 @@ function cmdFinalize() {
     soft_failures: softFailures,
     composedPhases: composedPhases || null,
     governance_missing: governanceMissing,
+    governance_auto_results: governanceResults,
     composed_missing: composedMissing,
     warnings,
     task: (state.task || "").slice(0, 200),
@@ -328,6 +469,33 @@ function cmdFinalize() {
       .filter((x) => x !== null)
       .join("\n");
     fs.appendFileSync(PROGRESS_MD, block, "utf-8");
+
+    // v0.8 #9：Ralph 完整版 — promise=NOT_COMPLETE 必写"失败专属段"，固定 4 字段，给 evolution-tracker 直接消费
+    if (promise === "NOT_COMPLETE") {
+      const failureBlock = [
+        "",
+        `## ❌ helix-run-${state.helix_run_id} NOT_COMPLETE`,
+        `- phase: ${failed.join(", ") || "(unknown)"}`,
+        `- reason: ${reports
+          .filter((r) => !r.passes)
+          .map((r) => `${r.phase}=passes_false`)
+          .join("; ") || "(no phase report)"}`,
+        `- 已修: 否`,
+        `- 复盘 link: 待写（findings.md F-NNN 或 progress.md 同会话）`,
+        `- task: ${(state.task || "").slice(0, 200)}`,
+        "",
+      ].join("\n");
+      fs.appendFileSync(PROGRESS_MD, failureBlock, "utf-8");
+    }
+  }
+
+  // v0.8 #4: OTLP 导出 — fire-and-forget，HARNESS_OTLP_ENDPOINT 未设则 no-op
+  try {
+    const { exportRun } = require("./lib/otlp_exporter.cjs");
+    exportRun(state.helix_run_id, PROJECT_DIR);
+  } catch (e) {
+    // 不阻塞 finalize
+    console.error(`[helix] otlp exporter load failed: ${e.message}`);
   }
 
   clearState();

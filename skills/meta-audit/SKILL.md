@@ -4,6 +4,11 @@ version: 0.1.0
 description: "审计元（论文 §6②）。在 a6-validator 通过后、helix --finalize 之前，独立 subagent 跑 code-reviewer + security-reviewer 双审，输出 4 维评分 + findings 清单。passes 与 a6 共同决定 finalize 是否放行。"
 status:
   can_run: true
+alex_harness_v08: true
+harness_role: quality_gate
+model_recommendation: opus
+runs_in: ["subagent"]
+tools_required: ["Read", "Grep", "Bash"]
 ---
 
 # meta-audit — 审计元（独立审视位）

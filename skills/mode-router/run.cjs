@@ -418,6 +418,7 @@ function cmdCoarse(taskDesc) {
     stage: "coarse",
     enforcement: buildEnforcement(s),
     note: "粗判仅给 a4 提前打 buff，最终决策以 Step 5.7 细判为准（不可绕过）",
+    deprecated: "v0.8 #6/#12: 数据显示 99% 自检，主链默认已移除；保留入口向后兼容",
   };
   printRecommendation(taskDesc, r, "coarse");
   safeAppend(ROUTER_LOG, {

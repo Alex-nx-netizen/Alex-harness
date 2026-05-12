@@ -12,6 +12,11 @@ metadata:
     FINDINGS_RECENT_N: 5
     RUNS_ANOMALY_LOOKBACK: 2
     RUNS_STALE_HOURS: 24
+alex_harness_v08: true
+harness_role: governance_meta
+model_recommendation: sonnet
+runs_in: ["main"]
+tools_required: ["Read", "Bash"]
 ---
 
 # context-curator (M3 #1)

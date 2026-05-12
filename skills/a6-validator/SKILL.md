@@ -4,6 +4,11 @@ version: 0.1.0
 description: "校验元。A5 执行完后自动检测项目类型，跑测试/lint/类型检查，输出结构化 ValidationReport。/a6-validator 手动触发，或 helix 编排 Step 8 自动调用。"
 status:
   can_run: true
+alex_harness_v08: true
+harness_role: business_meta
+model_recommendation: haiku
+runs_in: ["main"]
+tools_required: ["Bash"]
 ---
 
 # A6 validator — 校验元

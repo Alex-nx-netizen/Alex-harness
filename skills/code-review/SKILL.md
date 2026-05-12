@@ -4,6 +4,11 @@ version: 0.1.0
 description: "质量元（专业开发者视角）。helix Step 8.5：a5-executor 之后、a6-validator 之前。独立 subagent 跑 code-reviewer + security-reviewer + performance-optimizer + 语言专属 reviewer，输出 5 维评分（quality/security/performance/readability/testability）+ findings 清单。soft 失败（不卡 finalize）。"
 status:
   can_run: true
+alex_harness_v08: true
+harness_role: quality_gate
+model_recommendation: sonnet
+runs_in: ["subagent"]
+tools_required: ["Read", "Grep", "Glob", "Bash"]
 ---
 
 # code-review — 质量元（专业开发者视角）

@@ -7,14 +7,14 @@
     "url": "https://github.com/Alex-nx-netizen"
   },
   "metadata": {
-    "version": "0.7.1"
+    "version": "0.8.0"
   },
   "plugins": [
     {
       "name": "alex-harness",
       "source": "./",
       "description": "Single install: only /helix is exposed as a slash command; it spawns a1-a8 phases that auto-report passes back to a single ledger. Ralph contract enforced.",
-      "version": "0.7.1",
+      "version": "0.8.0",
       "author": {
         "name": "Alex-nx-netizen",
         "url": "https://github.com/Alex-nx-netizen"

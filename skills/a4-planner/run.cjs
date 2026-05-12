@@ -26,7 +26,7 @@ function nowBJ() {
 function composePhasesByType(type) {
   const t = (type || "").toLowerCase();
   if (t === "research") {
-    // 研究类：只认知/检索，不动代码
+    // 研究类：只认知/检索，不动代码（v0.8: research 仍保留 a3，唯一保留场景）
     return [
       "mode-router-coarse",
       "a1-task-understander",
@@ -44,8 +44,8 @@ function composePhasesByType(type) {
     ];
   }
   if (t === "feature" || t === "refactor" || t === "bugfix") {
+    // v0.8 #6/#12: mode-router-coarse 已从主链移除（数据：99% 是自检），fine 单独决策即可
     return [
-      "mode-router-coarse",
       "a1-task-understander",
       "a2-repo-sensor",
       "a4-planner",
@@ -59,7 +59,6 @@ function composePhasesByType(type) {
   }
   // 默认：全链（最安全）
   return [
-    "mode-router-coarse",
     "a1-task-understander",
     "a2-repo-sensor",
     "a4-planner",

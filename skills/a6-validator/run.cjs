@@ -9,6 +9,7 @@ const RUNS_LOG = path.join(SKILL_DIR, "logs", "runs.jsonl");
 const PHASE = "a6-validator";
 
 // v0.7：4 维评分（参见 SKILL.md §3）。LLM 透传，脚本兜底默认 4 分。
+// v0.8 #3：标记 score_source 防止默认值伪装成"真实评分"
 const SCORE_DIMENSIONS = [
   "accuracy",
   "completeness",
@@ -20,19 +21,30 @@ const DEFAULT_SCORE_VALUE = 4;
 function buildScore(rawScore) {
   const score = {};
   let total = 0;
+  let fallbackCount = 0;
   for (const d of SCORE_DIMENSIONS) {
-    let v =
+    const provided =
       rawScore &&
       typeof rawScore[d] === "number" &&
-      Number.isFinite(rawScore[d])
-        ? rawScore[d]
-        : DEFAULT_SCORE_VALUE;
+      Number.isFinite(rawScore[d]);
+    let v = provided ? rawScore[d] : DEFAULT_SCORE_VALUE;
+    if (!provided) fallbackCount += 1;
     if (v < 0) v = 0;
     if (v > 5) v = 5;
     score[d] = v;
     total += v;
   }
   score.total = total;
+  // 真实化诊断：detect uniform pattern（4 维全等）+ fallback 来源
+  const vals = SCORE_DIMENSIONS.map((d) => score[d]);
+  const uniform = vals.every((v) => v === vals[0]);
+  score._source =
+    fallbackCount === SCORE_DIMENSIONS.length
+      ? "default_fallback"
+      : fallbackCount > 0
+      ? "partial_fallback"
+      : "llm_provided";
+  score._uniform_suspect = uniform; // LLM 全维度填同分 → 大概率没真评
   return score;
 }
 

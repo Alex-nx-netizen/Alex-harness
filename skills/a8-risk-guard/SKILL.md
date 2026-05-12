@@ -4,6 +4,11 @@ version: 0.1.0
 description: "风险治理元。破坏性/不可逆操作前的强制守卫。自动 inject 到 helix 编排流程，也可手动 /a8-risk-guard <操作描述>。不可绕过。"
 status:
   can_run: true
+alex_harness_v08: true
+harness_role: guard
+model_recommendation: opus
+runs_in: ["main"]
+tools_required: ["Bash"]
 ---
 
 # A8 risk-guard — 风险治理元

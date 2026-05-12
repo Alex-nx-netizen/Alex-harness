@@ -4,6 +4,11 @@ version: 0.1.0
 description: "执行元。按 PlanDoc 逐步执行代码修改，一文件一确认，遇到破坏性操作强制调用 A8 risk-guard，完成后触发 A6 validator。"
 status:
   can_run: true
+alex_harness_v08: true
+harness_role: business_meta
+model_recommendation: sonnet
+runs_in: ["main", "subagent"]
+tools_required: ["Bash", "Read", "Edit", "Write"]
 ---
 
 # A5 executor — 执行元

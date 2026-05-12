@@ -4,6 +4,11 @@ version: 0.1.0
 description: "方案元。基于 TaskCard + RepoContext 生成 2-3 个实现方案对比，推荐最优路径。helix 编排 Step 5 调用，也可手动 /a4-planner。"
 status:
   can_run: true
+alex_harness_v08: true
+harness_role: business_meta
+model_recommendation: opus
+runs_in: ["main"]
+tools_required: ["Bash", "Read"]
 ---
 
 # A4 planner — 方案元

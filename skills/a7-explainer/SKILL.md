@@ -4,6 +4,11 @@ version: 0.1.0
 description: "说明元。基于代码变更自动生成 commit message、PR 描述、必要注释。遵循项目 git-workflow 风格。helix Step 9 按需调用，也可手动 /a7-explainer。"
 status:
   can_run: true
+alex_harness_v08: true
+harness_role: business_meta
+model_recommendation: haiku
+runs_in: ["main"]
+tools_required: ["Bash", "Read"]
 ---
 
 # A7 explainer — 说明元

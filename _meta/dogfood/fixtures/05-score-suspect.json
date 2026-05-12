@@ -1,0 +1,22 @@
+{
+  "fixture_id": "05-score-suspect",
+  "task": "v0.8 dogfood: a6 全 4 分（uniform_suspect）+ meta-audit 默认兜底 → 验证 #3 score 真实化警告",
+  "task_card": {
+    "type": "feature",
+    "scope": "微小 README typo 修复",
+    "done_criteria": ["typo 修复"]
+  },
+  "synthetic_phases": {
+    "a1-task-understander": { "passes": true },
+    "a2-repo-sensor": { "passes": true },
+    "a4-planner": { "passes": true },
+    "mode-router-fine": { "passes": true, "files_changed_count": 1, "steps_count": 1 },
+    "a5-executor": { "passes": true, "mode": "solo" },
+    "code-review": { "passes": true, "score": { "quality": 4, "security": 4, "performance": 4, "readability": 4, "testability": 4 } },
+    "a6-validator": { "passes": true, "no_score_provided": true },
+    "meta-audit": { "passes": true, "score": { "correctness": 4, "security": 4, "maintainability": 4, "alignment_with_plan": 4 } },
+    "a7-explainer": { "passes": true }
+  },
+  "expected_promise": "COMPLETE",
+  "expected_warnings_contains": "score 真实化嫌疑"
+}

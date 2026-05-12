@@ -17,6 +17,11 @@ evolution_signal_keywords:
   - 多余提示
 blueprint_ref: §3.B4
 design_ref: design/mode-router-draft.md v0.1
+alex_harness_v08: true
+harness_role: governance_meta
+model_recommendation: haiku
+runs_in: ["main"]
+tools_required: ["Bash"]
 ---
 
 # mode-router

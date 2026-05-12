@@ -4,6 +4,12 @@ version: 0.1.0
 description: "检索元。在当前仓库内按关键词或语义检索相关代码、文件、注释。由 A4 planner 编排时调用，也可手动 /a3-retriever <查询>。"
 status:
   can_run: true
+alex_harness_v08: true
+harness_role: business_meta
+model_recommendation: haiku
+runs_in: ["main"]
+tools_required: ["Bash", "Grep", "Glob"]
+deprecated: "v0.8 (#11): scope 已明确时跳过；保留备用"
 ---
 
 # A3 retriever — 检索元

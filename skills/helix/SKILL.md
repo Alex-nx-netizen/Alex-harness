@@ -4,6 +4,11 @@ version: 0.2.0
 description: "Alex-harness 唯一入口（领导视角）。所有下属 skill 必须向 helix 汇报。/helix 启动一次完整工作流：start → a1-a8 phase 顺序执行 → 每步 passes 二元判定 → finalize 生成 promise=COMPLETE|NOT_COMPLETE。Ralph 契约嵌入。"
 status:
   can_run: true
+alex_harness_v08: true
+harness_role: orchestrator
+model_recommendation: opus
+runs_in: ["main"]
+tools_required: ["Bash", "Read", "Edit", "Write"]
 ---
 
 # helix — 唯一入口 / 领导视角

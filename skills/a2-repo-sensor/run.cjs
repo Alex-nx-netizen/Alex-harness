@@ -91,6 +91,57 @@ function findKeyFiles(root) {
   return candidates.filter((f) => fs.existsSync(path.join(root, f)));
 }
 
+// v0.8 #7：轻量 repo-map（无 tree-sitter 依赖）
+// 用 grep 在常见源目录抽 function/class/export/def/struct 的第一行签名
+// 上限 80 行；超出说明仓库太大，应该让 LLM 用 Glob/Grep 精准查
+function buildRepoMap(root) {
+  const SRC_DIRS = ["src", "lib", "skills", "app", "packages", "internal", "pkg", "cmd"];
+  const exists = SRC_DIRS.filter((d) => fs.existsSync(path.join(root, d)));
+  if (exists.length === 0) return { dirs_scanned: [], symbols: [], note: "no standard src dirs" };
+
+  // 跨语言通用：JS/TS export+function+class / Python def+class / Go func+type / Rust fn+struct+pub fn
+  // 每个文件只抽前 5 个符号，整体上限 80
+  const pattern =
+    "^(export\\s+(async\\s+)?function|export\\s+(default\\s+)?(async\\s+)?function|" +
+    "export\\s+(default\\s+)?class|" +
+    "export\\s+(const|let|var)\\s+\\w+\\s*=\\s*(async\\s+)?\\(|" +
+    "function\\s+\\w+|class\\s+\\w+|" +
+    "def\\s+\\w+|class\\s+\\w+\\s*[:\\(]|" +
+    "func\\s+\\w+|type\\s+\\w+|" +
+    "(pub\\s+)?fn\\s+\\w+|struct\\s+\\w+|trait\\s+\\w+)";
+
+  const symbols = [];
+  for (const d of exists) {
+    const cmd = `grep -rEn "${pattern}" "${path.join(root, d)}" --include="*.ts" --include="*.tsx" --include="*.js" --include="*.cjs" --include="*.mjs" --include="*.py" --include="*.go" --include="*.rs" --include="*.java" --include="*.kt" 2>/dev/null | head -100`;
+    let out = "";
+    try {
+      out = execSync(cmd, { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
+    } catch {
+      continue;
+    }
+    for (const line of out.split("\n")) {
+      if (!line) continue;
+      // 格式：path:line_no:source
+      const m = line.match(/^([^:]+):(\d+):(.*)$/);
+      if (!m) continue;
+      const file = path.relative(root, m[1]);
+      symbols.push({
+        file,
+        line: parseInt(m[2], 10),
+        sig: m[3].trim().slice(0, 120),
+      });
+      if (symbols.length >= 80) break;
+    }
+    if (symbols.length >= 80) break;
+  }
+  return {
+    dirs_scanned: exists,
+    symbols,
+    truncated: symbols.length >= 80,
+    note: "v0.8 grep-based; 升级到 tree-sitter 是 v0.9 plan",
+  };
+}
+
 function main() {
   const startMs = Date.now();
   const root = process.cwd();
@@ -127,6 +178,7 @@ function main() {
     has_tests: hasTests,
     has_ci: hasCi,
     dependencies: Object.keys(deps).slice(0, 20),
+    repo_map: buildRepoMap(root), // v0.8 #7: 轻量函数签名地图
     generated_at: ts,
   };
 
@@ -146,12 +198,13 @@ function main() {
     phase: PHASE,
     passes,
     summary: passes
-      ? `扫到 ${ctx.tech_stack.join("/") || "未知栈"}，${ctx.key_files.length} 个关键文件，${ctx.dirty_files.length} 个脏文件`
+      ? `扫到 ${ctx.tech_stack.join("/") || "未知栈"}，${ctx.key_files.length} 个关键文件，${ctx.dirty_files.length} 个脏文件，repo_map ${ctx.repo_map.symbols.length} 符号`
       : "未识别到任何技术栈/关键文件/提交记录",
     output: {
       tech_stack: ctx.tech_stack,
       key_files: ctx.key_files,
       dirty_count: ctx.dirty_files.length,
+      repo_map_symbols: ctx.repo_map.symbols.length,
       tmp_path: tmpPath,
     },
     duration_ms: Date.now() - startMs,

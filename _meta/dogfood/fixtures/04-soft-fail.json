@@ -1,0 +1,22 @@
+{
+  "fixture_id": "04-soft-fail",
+  "task": "v0.8 dogfood: code-review 软失败 → SOFT_PHASES 白名单不卡 promise → 仍 COMPLETE",
+  "task_card": {
+    "type": "feature",
+    "scope": "加新 API endpoint",
+    "done_criteria": ["返回 200", "schema OK"]
+  },
+  "synthetic_phases": {
+    "a1-task-understander": { "passes": true },
+    "a2-repo-sensor": { "passes": true },
+    "a4-planner": { "passes": true },
+    "mode-router-fine": { "passes": true, "files_changed_count": 2, "steps_count": 3 },
+    "a5-executor": { "passes": true, "mode": "solo" },
+    "code-review": { "passes": false, "score": { "quality": 2, "security": 1, "performance": 2, "readability": 3, "testability": 2 }, "errors": ["soft_blocked"] },
+    "a6-validator": { "passes": true, "score": { "accuracy": 4, "completeness": 4, "actionability": 4, "format": 5 } },
+    "meta-audit": { "passes": true, "score": { "correctness": 4, "security": 4, "maintainability": 4, "alignment_with_plan": 5 } },
+    "a7-explainer": { "passes": true }
+  },
+  "expected_promise": "COMPLETE",
+  "expected_soft_failures": ["code-review"]
+}

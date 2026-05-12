@@ -4,6 +4,11 @@ version: 0.1.0
 description: "任务理解元。把用户的模糊描述解析成结构化 TaskCard：类型/作用域/完成标准/风险信号。helix 编排时在 A2 之后自动调用，也可手动 /a1-task-understander <描述>。"
 status:
   can_run: true
+alex_harness_v08: true
+harness_role: business_meta
+model_recommendation: sonnet
+runs_in: ["main"]
+tools_required: ["Bash", "Read"]
 ---
 
 # A1 task-understander — 任务理解元

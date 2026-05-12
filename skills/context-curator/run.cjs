@@ -16,22 +16,26 @@ const path = require("path");
 const os = require("os");
 
 // ---- Paths ----
+// v0.8 #2 修：项目布局是 skills/<name>/，不是 .claude/skills/<name>/，
+// 所以 PROJECT_ROOT = ../..（不是 ../../..）；SKILLS_DIR 也直接用 skills/
 const SELF_DIR = __dirname;
-const PROJECT_ROOT = path.resolve(SELF_DIR, "..", "..", "..");
+const PROJECT_ROOT = process.env.HARNESS_PROJECT_ROOT
+  ? process.env.HARNESS_PROJECT_ROOT
+  : path.resolve(SELF_DIR, "..", "..");
 const META_DIR = path.join(PROJECT_ROOT, "_meta");
-const SKILLS_DIR = path.join(PROJECT_ROOT, ".claude", "skills");
+const SKILLS_DIR = path.join(PROJECT_ROOT, "skills");
 const DESIGN_DIR = path.join(PROJECT_ROOT, "design");
 const SNAPSHOTS_DIR = path.join(META_DIR, "context-snapshots");
 const ARCHIVE_DIR = path.join(SNAPSHOTS_DIR, "_archive");
 const SELF_LOGS_DIR = path.join(SELF_DIR, "logs");
 const SELF_RUNS_JSONL = path.join(SELF_LOGS_DIR, "runs.jsonl");
 
-// project-level memory dir (Windows path per CLAUDE.md)
+// project-level memory dir — v0.8 #2 修跨平台（mac 路径名）；不存在 graceful skip
 const MEMORY_MD = path.join(
   os.homedir(),
   ".claude",
   "projects",
-  "E--ai-study-person-Alex-harness",
+  "-Users-a1234-person-ai-study-Alex-harness",
   "memory",
   "MEMORY.md",
 );

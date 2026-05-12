@@ -15,6 +15,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 const { spawnSync } = require("child_process");
 
 const SKILL_DIR = __dirname;
@@ -22,6 +23,28 @@ const PROJECT_DIR = process.cwd();
 const HELIX_RUN = path.join(PROJECT_DIR, "skills", "helix", "run.cjs");
 const RUNS_LOG = path.join(SKILL_DIR, "logs", "runs.jsonl");
 const PHASE = "a5-executor";
+
+// v0.8 #10：与 helix/run.cjs stableHash 保持一致
+function stableHash(obj) {
+  if (!obj || typeof obj !== "object") return null;
+  const sorted = (o) => {
+    if (Array.isArray(o)) return o.map(sorted);
+    if (o && typeof o === "object") {
+      return Object.keys(o)
+        .sort()
+        .reduce((acc, k) => {
+          acc[k] = sorted(o[k]);
+          return acc;
+        }, {});
+    }
+    return o;
+  };
+  return crypto
+    .createHash("sha256")
+    .update(JSON.stringify(sorted(obj)))
+    .digest("hex")
+    .slice(0, 16);
+}
 
 function nowBJ() {
   const bj = new Date(Date.now() + 8 * 3600 * 1000);
@@ -148,6 +171,10 @@ function main() {
     }
   };
 
+  // v0.8 #10：透传 task_card hash 给 helix --report 校验单源契约
+  // a5 入参可选 input.task_card；若提供，算 hash 透传；helix 校验是否与 a4 锁定一致
+  const taskCardHash = input.task_card ? stableHash(input.task_card) : null;
+
   const result = {
     phase: PHASE,
     passes,
@@ -168,6 +195,7 @@ function main() {
       team_type: teamType,
       shape,
       subagent_run_ids: subagentRunIds,
+      task_card_hash: taskCardHash,
       mode_check: {
         passes: modeCheckPasses,
         reason: modeReason,

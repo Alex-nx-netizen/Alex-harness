@@ -44,6 +44,11 @@ metadata:
     skill_md: "v0.1 完整"
     executor: "v0.1 完整 (M2.3.2 完成 2026-4-29)"
     can_run: true
+alex_harness_v08: true
+harness_role: governance_meta
+model_recommendation: sonnet
+runs_in: ["main"]
+tools_required: ["Read", "Bash", "Write"]
 ---
 
 # evolution-tracker (v0.1.0)

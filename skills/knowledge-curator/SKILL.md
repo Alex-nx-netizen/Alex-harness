@@ -7,6 +7,11 @@ metadata:
     bins: ["lark-cli"]
     skills: ["lark-doc", "lark-drive", "lark-shared"]
   cliHelp: "lark-cli docs --help"
+alex_harness_v08: true
+harness_role: governance_meta
+model_recommendation: sonnet
+runs_in: ["main"]
+tools_required: ["Bash", "Read"]
 ---
 
 # knowledge-curator (v0.1.0)
