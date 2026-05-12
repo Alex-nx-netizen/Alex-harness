@@ -425,7 +425,6 @@ Alex-harness/
 
 ## 关键参考
 
-- **飞书 Harness 合集 wiki**：<https://www.feishu.cn/wiki/UtW0wUbPbifCX4kk3ypcGcyinGg>（13.2 万字，harness 设计的主要理论依据）
 - **设计文档**：`design/harness-blueprint.md`（用户主权区，持续 v0.x → v1.0）
 - **执行日志**：`_meta/progress.md`（最新在最上面）
 - **踩坑实录**：`_meta/findings.md`（失败比成功更值钱）
@@ -434,6 +433,4 @@ Alex-harness/
 
 ## 贡献 / 反馈
 
-欢迎 issues / PRs / forks。本项目是 Alex 的私人实验场，但所有 skill 都开放给社区。
-
-如果你也在搭自己的 harness，欢迎来飞书 wiki 交流。
+欢迎交流。
