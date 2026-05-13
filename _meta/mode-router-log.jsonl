@@ -49,3 +49,10 @@
 {"run_id":"2026-5-12 21:40:45","stage":"fine","task_desc":"重构前端组件并行拆分","plan_signals":{"files_changed_count":12,"steps_count":12},"mode":"team","team_type":"subagent","score":9,"shape":"manager_worker","breakdown":{"parallel":4,"refactor":1,"files_many":3,"steps_some":1},"reason":"综合评分 9 ≥3 触发 team：并行信号(+4)、plan>10 文件(+3)、plan>8 步(+1)、重构/迁移(+1)","timestamp_ms":1778593245641}
 {"run_id":"2026-5-13 11:05:25","stage":"coarse","task_desc":"{}","mode":"solo","team_type":null,"score":0,"breakdown":{},"reason":"综合评分 0 <3，默认 solo","timestamp_ms":1778641525900}
 {"run_id":"2026-5-13 11:05:59","stage":"coarse","task_desc":"{}","mode":"solo","team_type":null,"score":0,"breakdown":{},"reason":"综合评分 0 <3，默认 solo","timestamp_ms":1778641559064}
+{"run_id":"2026-5-13 11:18:34","stage":"coarse","task_desc":"{}","mode":"solo","team_type":null,"score":0,"breakdown":{},"reason":"综合评分 0 <3，默认 solo","timestamp_ms":1778642314843}
+{"run_id":"2026-5-13 11:18:35","stage":"coarse","task_desc":"{}","mode":"solo","team_type":null,"score":0,"breakdown":{},"reason":"综合评分 0 <3，默认 solo","timestamp_ms":1778642315111}
+{"run_id":"2026-5-13 11:18:35","stage":"coarse","task_desc":"{}","mode":"solo","team_type":null,"score":0,"breakdown":{},"reason":"综合评分 0 <3，默认 solo","timestamp_ms":1778642315377}
+{"run_id":"2026-5-13 11:18:40","stage":"coarse","task_desc":"{}","mode":"solo","team_type":null,"score":0,"breakdown":{},"reason":"综合评分 0 <3，默认 solo","timestamp_ms":1778642320980}
+{"run_id":"2026-5-13 11:18:41","stage":"coarse","task_desc":"{}","mode":"solo","team_type":null,"score":0,"breakdown":{},"reason":"综合评分 0 <3，默认 solo","timestamp_ms":1778642321119}
+{"run_id":"2026-5-13 11:22:27","stage":"coarse","task_desc":"{}","mode":"solo","team_type":null,"score":0,"breakdown":{},"reason":"综合评分 0 <3，默认 solo","timestamp_ms":1778642547565}
+{"run_id":"2026-5-13 11:24:04","stage":"coarse","task_desc":"{}","mode":"solo","team_type":null,"score":0,"breakdown":{},"reason":"综合评分 0 <3，默认 solo","timestamp_ms":1778642644651}

@@ -37,4 +37,79 @@ function safeAppend(p, obj) {
   fs.appendFileSync(p, line + "\n", "utf-8");
 }
 
-module.exports = { nowBJ, safeAppend };
+/**
+ * 去 UTF-8 BOM（F-026 防御）。任何 fs.readFileSync(...,'utf-8') 后该过一遍。
+ */
+function stripBom(s) {
+  return s && s.charCodeAt(0) === 0xfeff ? s.slice(1) : s;
+}
+
+/**
+ * 安全读取 jsonl：strip BOM + 按 /\r?\n/ split（F-023 CRLF 防御）+ filter 空行。
+ * 返回解析后对象数组；遇 parse 错抛带行号的异常，调用者必须捕获。
+ */
+function safeReadJsonl(filePath) {
+  const fs = require("fs");
+  const raw = stripBom(fs.readFileSync(filePath, "utf-8"));
+  const lines = raw.split(/\r?\n/).filter((l) => l.trim());
+  return lines.map((line, idx) => {
+    try {
+      return JSON.parse(line);
+    } catch (e) {
+      throw new Error(`safeReadJsonl ${filePath} row ${idx + 1}: ${e.message}`);
+    }
+  });
+}
+
+/**
+ * 输出 skill 结果：TTY → 人类友好摘要；管道 → 原 JSON（行为安全保护）。
+ *
+ * 收益：人手跑 `node skills/xxx/run.cjs ...` 不再翻 20 行 JSON；
+ *      helix 通过 spawnSync 调用时 stdout 非 TTY，自动走 JSON 路径，
+ *      pipeline 行为 100% 不变。
+ *
+ * @param {object} result 标准 phase result（含 phase / passes / summary / output / errors）
+ * @param {object} [opts]
+ * @param {boolean} [opts.force] 强制 pretty 模式（如调试）
+ * @param {boolean} [opts.hint=true] 是否打印"查看完整结果"提示
+ */
+function printResult(result, opts = {}) {
+  const force = opts.force === true;
+  const isTTY = process.stdout.isTTY === true || force;
+  if (!isTTY) {
+    // pipeline / 重定向 / spawnSync — 原 JSON 输出（不改行为）
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
+  // 终端 — 紧凑摘要
+  const softFail = !!(result.output && result.output.soft_fail);
+  const hasRec = !!(result.output && result.output.has_recommendations);
+  let icon;
+  if (softFail) icon = "⚠️ ";
+  else if (result.passes === true) icon = hasRec ? "🟡" : "✅";
+  else if (result.passes === false) icon = "❌";
+  else icon = "📋";
+
+  const head = result.phase ? `${icon} ${result.phase}` : icon;
+  const summary = result.summary || "";
+  console.log(`${head}  ${summary}`);
+
+  const next = result.output && result.output.suggested_next;
+  if (next) console.log(`   → ${next}`);
+
+  if (Array.isArray(result.errors) && result.errors.length) {
+    console.log(`   ! errors: ${result.errors.join(", ")}`);
+  }
+
+  const nextStep = result.output && result.output.next_step;
+  if (nextStep && result.passes === false) {
+    // schema fail / 输入错时给一句可执行提示
+    console.log(`   ℹ ${nextStep}`);
+  }
+
+  if (opts.hint !== false) {
+    console.log(`   (full JSON: pipe stdout, or check logs/runs.jsonl)`);
+  }
+}
+
+module.exports = { nowBJ, safeAppend, stripBom, safeReadJsonl, printResult };

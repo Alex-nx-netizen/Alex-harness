@@ -16,7 +16,7 @@ const SKILLS_DIR = path.join(__dirname, "..", "skills");
 function classify(entry, skill) {
   const summary = (entry.summary || "").toLowerCase();
   const taskSnippet = (entry.task_snippet || "").toLowerCase();
-  const errors = entry.errors || [];
+  const errors = Array.isArray(entry.errors) ? entry.errors : [];
 
   if (errors.includes("invalid_input_json") || errors.includes("dimensions_missing")) {
     return {

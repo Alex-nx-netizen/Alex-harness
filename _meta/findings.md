@@ -9,11 +9,23 @@
 |---|---|---|
 | **✅ 已修（Fixed）** | F-008 · F-010 · F-011 · F-012 · F-013 · F-014 · F-015 · F-016 · F-017 · F-018 · F-019 · F-020 · F-021 · F-022 · F-023 · F-024 · F-025 | 当时 bug 已 hotfix；长期候选另作新议案 |
 | **📐 设计洞察（Design）** | F-001 · F-002 · F-003 · F-004 · F-005 · F-006 · F-007 · F-009 | 工具/API 限制 + 元思想原则；不是 bug |
-| **🟢 当前活跃（Active）** | _无_ | 新发现的活跃问题用 F-026 起编号 |
+| **🟢 当前活跃（Active）** | F-026（已 hotfix，但根因未防）| 新发现的活跃问题用 F-027 起编号 |
 
 > **新增 finding 守则**：编号从 F-026 起递增；写入时必须明示状态（**fixed** / **design** / **active**），并把它登记到上表。状态变化（active → fixed）同步本表，否则视为流程外。
 
 ## 已验证（Confirmed）
+
+### F-026: `_meta/helix-runs.jsonl` 首行 BOM 让 JSON.parse 静默失败（status=active-root-cause）
+
+- **来源**：2026-5-13 体检 UX 优化阶段冒烟，跑 `rotate_check` 升级版全行 parse 校验，发现 `_meta/helix-runs.jsonl` 第 1 行从 2026-5-2 起就有 UTF-8 BOM (`EF BB BF`)，254 行里只有这 1 条 fail
+- **现象**：`JSON.parse('﻿{...}')` 抛 `Unexpected token`；过去用 `.split('\n').forEach(JSON.parse)` 的脚本在第 1 行就死掉，但因为多数读取器有 try/catch 兜底（吞掉错误），从未浮出
+- **结论**：写 jsonl 时下游写入器没用 BOM（safeAppend 用 `JSON.stringify` 干净），那么这个 BOM 是某次编辑器（VS Code "UTF-8 with BOM" 模式）保存留下的。**任何**读 _meta/*.jsonl 的脚本都该入口 `stripBom`，参考 `_meta/rotate.cjs` `stripBom()` 实现
+- **解决（这次）**：本次冒烟直接 `fs.writeFileSync(file, raw.charCodeAt(0)===0xfeff ? raw.slice(1) : raw)`；254 行全部恢复 parse
+- **解决（长期）**：把 `stripBom` 提到 `_meta/lib/common.cjs`，提供 `safeReadJsonl(path)` 让所有读取器走同一入口；同时建议在 `_meta/rotate.cjs` 触发的归档校验里也加 BOM 防御（已有，但仅本地化）
+- **影响**：F-026 同源于 F-008（写后必校验）+ F-023（CRLF）—— 都是"编码层异质性"导致 JSON parse 静默失败
+- **关联**: `_meta/rotate.cjs` `stripBom()` / `_meta/lib/common.cjs` / 铁律 #8
+
+---
 
 ### F-025: Dashboard plugin cache fallback 静默失败 — 与 F-020 同源（plugin cache vs 项目源代码路径错配）
 

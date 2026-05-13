@@ -31,7 +31,7 @@
 
 const fs = require("fs");
 const path = require("path");
-const { nowBJ, safeAppend } = require("../../_meta/lib/common.cjs");
+const { nowBJ, safeAppend, printResult } = require("../../_meta/lib/common.cjs");
 const { spawnSync } = require("child_process");
 
 const SKILL_DIR = __dirname;
@@ -175,7 +175,7 @@ function main() {
       ...err,
       user_feedback: { rating: null, fix_notes: null },
     });
-    console.log(JSON.stringify(err, null, 2));
+    printResult(err);
     process.exit(2);
   }
 
@@ -209,7 +209,7 @@ function main() {
         cwd: PROJECT_DIR,
       });
     }
-    console.log(JSON.stringify(err, null, 2));
+    printResult(err);
     process.exit(0); // phase 失败由 passes 表达，不靠 exit code
   }
 
@@ -262,7 +262,7 @@ function main() {
     });
   }
 
-  console.log(JSON.stringify(result, null, 2));
+  printResult(result);
 }
 
 main();

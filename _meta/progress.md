@@ -6,6 +6,40 @@
 
 ## 2026-5-13
 
+### 会话 33：执行速度 + 用户观感优化（行为安全）
+
+- 🧠 **触发**：Alex "在不影响当前功能的情况下，能否优化执行速度和用户观感？"
+- 📊 **基准测量**：
+  - skill 冷启动 190-200ms，node baseline 125ms — 真业务只 ~70ms，几乎触底
+  - helix 自身 135ms — 最干净
+  - 27 处 `JSON.stringify(_, null, 2)` 默认 pretty 输出，session-reporter 输出 155 行 / 20KB
+- 🛠 **核心方案：TTY 检测 + printResult 助手**
+  - `_meta/lib/common.cjs` 新增 `printResult(result)`：`process.stdout.isTTY` 检测
+    - 终端模式 → emoji 单行摘要 + suggested_next + 错误清单（≤4 行）
+    - 管道/spawnSync → 原 `JSON.stringify(_, null, 2)` 输出（100% 行为保持）
+  - 4 个 skill（code-review/code-simplifier/meta-audit/a6-validator）8 处 `console.log(JSON.stringify(...))` → `printResult(...)`
+- 🛡 **F-026 BOM 防御副产物**：冒烟 jsonl 全行 parse 时发现 `_meta/helix-runs.jsonl` 第 1 行从 5-2 起就带 UTF-8 BOM 静默 fail
+  - 立刻 strip BOM（254 → 254，无数据损失）
+  - `_meta/lib/common.cjs` 加 `stripBom` + `safeReadJsonl`（任何 jsonl 读取统一入口；同源覆盖 F-008 + F-023）
+  - `findings.md` 加 F-026 条目；活跃区编号续 F-027
+  - 这是新 finding 规则（H 阶段定）的首条 active → fixed 演示
+- 🐛 **audit_fill_feedback.cjs 防御补漏**：`errors.includes` 在 `errors` 非数组时崩 → 加 `Array.isArray` 守门；二次跑 119 条全审，标 6 条 session-reporter 为 unknown
+- 📈 **收益数据（终端模式行数减少）**：
+  - code-review: 18 行 → 4 行（-78%）
+  - code-simplifier: 19 行 → 4 行（-79%）
+  - meta-audit: 17 行 → 4 行（-76%）
+  - a6-validator: 34 行 → 2 行（-94%）
+  - 平均 ~80% 输出压缩
+- ✅ **冒烟全过**：14 skill 全 OK；15 个 jsonl 全行 parse（含 helix-runs 278 行）；速度无变（printResult ~0ms 开销）
+- 📌 **教训 / 设计决定**：
+  - **TTY 检测 > 改默认**：直接默认 terse 会破坏 spawnSync pipeline；TTY 检测让人手用 / 自动用同代码两种行为
+  - **微优化先确认有空间**：测出 skill 启动 ~70ms 真业务时就该停止追"快"，转去 UX
+  - **顺手抓 F-026 BOM**：本来是 UX 任务，结果发现 5-2 起就潜伏的 jsonl parse fail —— 工具一旦真用就照妖
+- 📦 **变更文件**：
+  - 修改：`_meta/lib/common.cjs`（+60 行，3 个新 export）/ 4 skill run.cjs / `_meta/findings.md` / `_meta/audit_fill_feedback.cjs` / `_meta/helix-runs.jsonl`（去 BOM）
+
+---
+
 ### 会话 32：项目体检 8.1 整改（A-H 全做）
 
 - 🧠 **触发**：Alex 在会话 31 落地反冗余三阶段后问"还能如何优化？审查一下" → 多维体检发现 12 个可优化点（最关键：14 处 `nowBJ` 重复 / 15 条 logs 零 feedback / 55MB 孤儿 tmux log / 4 处文档漂移）→ Alex "A-H 全做"

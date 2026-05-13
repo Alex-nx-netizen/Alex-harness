@@ -2,7 +2,7 @@
 const { execSync, spawnSync } = require("child_process");
 const fs = require("fs");
 const path = require("path");
-const { nowBJ } = require("../../_meta/lib/common.cjs");
+const { nowBJ, printResult } = require("../../_meta/lib/common.cjs");
 
 const SKILL_DIR = __dirname;
 const HELIX_RUN = path.join(process.cwd(), "skills", "helix", "run.cjs");
@@ -157,7 +157,7 @@ function main() {
       action_required: null,
     };
     reportToHelix(report, root);
-    console.log(JSON.stringify(report, null, 2));
+    printResult(report);
     return;
   }
 
@@ -200,7 +200,7 @@ function main() {
   };
 
   reportToHelix(report, root);
-  console.log(JSON.stringify(report, null, 2));
+  printResult(report);
 }
 
 main();
