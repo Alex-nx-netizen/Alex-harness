@@ -53,6 +53,29 @@
 7. **时间格式统一**：所有时间戳/日期一律用北京时间，格式 `YYYY-M-D HH:MM:SS`（含时刻）或 `YYYY-M-D`（仅日期）。**禁用** ISO 8601 `T+08:00`、UTC、前导 0 月份/日期。例：`2026-4-28 22:18:40` ✅；`2026-04-28T15:20:00+08:00` ❌
 8. **写 JSON/JSONL 后必须立刻校验**：用 `node -e "JSON.parse(require('fs').readFileSync('path','utf-8'))"` 或脚本逐行 parse。Windows 路径里的 `\` 在 JSON 字符串中必须转义为 `\\`。这条是 F-008 的产物（蓝图 §3.A6 校验元缺失的具象化）
 
+## 反冗余硬规则（v0.8.1 新增 · Karpathy + Lean Code 落地）
+
+> 来源：`design/redundant-code-solutions.md`（2026-5-13 调研报告 §2.3）。
+> 旨在把"先想后做"具象成可执行清单，对应 [Lean Code Manifesto](https://github.com/socialawkward/lean-code-llm-manifesto) 10 戒律精华版。
+
+### 写代码**前**必答的 3 个问题
+
+1. 这段逻辑是不是已经在仓库别处实现了？（必须 grep 过）
+2. 这个抽象是不是"以为将来会用到"的预案？（没有 3 处以上具体使用就不抽象，三段相似 > 一个早抽象）
+3. 这段代码删掉会怎样？（删了还工作 = 它本来就是冗余）
+
+### 写代码**后**必做的 3 件事
+
+1. **自检 diff**：每行变更能否对应到用户需求的某一句？不能对应就删
+2. **净行数检查**：本次改动是不是净增加？如果是，重读一遍确认"加"是必要的（铁律：能删则删，先删后加）
+3. **注释清理**：删掉所有"重述代码"的注释；保留 WHY，去掉 WHAT；不清晰的代码改名/改结构，不靠注释解释
+
+### 10 条软戒律（评审参考，不卡通过）
+
+`no dead code` · `no redundant validation` · `standard library first` · `comments explain WHY not WHAT` · `minimal error handling`（只在系统边界处理） · `earn abstraction`（≥3 处具体使用才抽象） · `flat over nested`（早 return / 迭代优于递归） · `delete before adding` · `one way to do it`（不混用模式） · `fail fast, fail loud`
+
+> 触发：`/code-simplifier`（专项重构）/ `_meta/refactor-cycle.md`（每月一次大扫除）/ a5-executor §1.5 pre-commit 自检（写代码前后双向卡）。
+
 ## 给 Claude 的提示
 
 ### 进入项目时必读顺序

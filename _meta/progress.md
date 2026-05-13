@@ -4,6 +4,39 @@
 
 ---
 
+## 2026-5-13
+
+### 会话 31：反冗余三阶段落地（CLAUDE.md 硬规则 + code-simplifier skill + 月度 refactor-cycle）
+
+- 🧠 **触发**：Alex "今天新发现一个问题，这个项目插件写的代码，冗余逻辑太多了。调研一下市场" → 调研报告 `design/redundant-code-solutions.md`（13 个来源、5 大类 19 子模式、4 类市场方案） → Alex "全部同时修改优化"，三阶段一起做
+- 📚 **市场调研要点**（详见 `design/redundant-code-solutions.md`）：
+  - 学术：arxiv 2503.06327 把 LLM 冗余分成 5 大类，Performance 34.15% + Maintainability 21.14%
+  - 官方：Anthropic 已开源内部 `code-simplifier` plugin，护栏哲学是"只动新改的代码、不改行为"
+  - 工具链：jscpd（重复块） + knip（dead code） + ts-prune + depcheck
+  - prompt 层：Karpathy 4 准则 + Lean Code 10 戒律可直接抄进 CLAUDE.md
+  - 反模式：边写边重构 / LLM 目测找冗余（`/simplify` 已知会误删防御性代码）
+- 🛠 **阶段 1 · 规约固化（3 处编辑）**：
+  - `CLAUDE.md`：新增 "反冗余硬规则" 段（写前 3 问 / 写后 3 件 / Lean 10 软戒律），引到 a5/code-simplifier/refactor-cycle 三处触发点
+  - `skills/a5-executor/SKILL.md`：新增 §1.5 pre-commit 自检（写前 3 问：复用 / 抽象 / 可删；写后 3 验：diff 对账 / import 清扫 / 净行数趋势）
+  - `skills/a6-validator/SKILL.md`：在 4 维评分表后加 v0.8.1 补充——`actionability` 可纳入反冗余软信号，但不增维度（专项交给 code-simplifier）
+- 🛠 **阶段 2 · 自建项目级 code-simplifier skill**：
+  - `skills/code-simplifier/SKILL.md`（v0.1.0，~280 行）：仿 Anthropic 设计（只动新改 / 不改行为）+ Alex-harness 量身定制（5 维评分 redundancy/dead_code/complexity/naming/comments_signal + L1-L3 反馈闭环 + helix soft-fail 通道）
+  - `skills/code-simplifier/run.cjs`（~240 行）：schema 校验、5 维 0-5、阈值 ≥20 ok / 12-19 recommendations / <12 soft_blocked；**新增 `behavior_violations` 计数器**——findings 中 `behavior_safe=false` 自动升级 severity ≥ HIGH 且提示走 a5+a8
+  - `skills/code-simplifier/logs/.gitkeep`：占位
+  - **冒烟通过**：Test 1（空输入 → schema soft-fail，dimensions_missing）/ Test 2（19/25 + HIGH finding → recommendations，suggested 回 a5）/ Test 3（behavior_safe=false LOW → 自动升级 HIGH，behavior_violations=1，suggested 走 a5+a8）；logs/runs.jsonl 3 行全部 `JSON.parse` OK（铁律 #8）
+- 🛠 **阶段 3 · 月度大扫除**：
+  - `_meta/refactor-cycle.md`：7 步流程（基线 → jscpd → knip/简易 dead → 挑 3 issue → code-simplifier → 全量测试 → 单 commit）+ 收尾复盘 3 问 + 与其他元边界表 + 历史 cycle 表（首次预计 2026-6-1）
+- 📌 **教训 / 设计决定**：
+  - **code-simplifier 不进 helix 默认 phases**：避免每次跑都+1 phase，改为手动 / 月度触发；保留 v0.8.2 候选 `--with-simplifier` 显式挂钩
+  - **不删官方 plugin 路线，但选自建**：原因是项目已有 logs/runs.jsonl + L1-L3 反馈闭环纪律（铁律 #4），官方 plugin 是一次性 prompt 无闭环
+  - **`behavior_violations` 是核心创新**：官方 plugin 只是说"不改行为"，本项目用脚本强制——`behavior_safe=false` 的 finding 自动升 HIGH + suggested_next 改写为"走 a5+a8 不在本 skill 处理"，把"不可逆变更必走 risk-guard"具象化到工具层
+  - **a6 没动评分维度**：原计划加第 5 维 Lean Code，最终改为在 `actionability` 语义里软纳入；理由是 a6 二元 check 角色应保持纯净，专项交给 code-simplifier
+- 📦 **来源 / 关键文档**：
+  - 调研报告：`design/redundant-code-solutions.md`（13 来源，方法论 + Anthropic plugin 内幕 + Karpathy + Lean Manifesto + 反模式警示）
+  - 实操手册：`_meta/refactor-cycle.md`（每月跑）
+
+---
+
 ## 2026-5-11
 
 ### 会话 30：README 图解化 + code-review skill 设计草案

@@ -53,6 +53,8 @@ node .claude/skills/a6-validator/run.cjs
 
 **总分 = 4 维之和（0-20）**。**注意：score 不影响 passes**——passes 仍由机器层 check 决定。score 只用于 evolution-tracker 长期趋势分析。
 
+> **v0.8.1 补充**：`actionability` 评分时可纳入"反冗余"维度作为软信号——本次 diff 是否净行数下降、是否无未用 import、是否复用了已有实现。但**不新增第 5 维**——专项检测交给 `code-simplifier` skill（`skills/code-simplifier/SKILL.md`），a6 仍专注机器 check 的二元结论。
+
 ### 调用约定
 
 a6-validator 接收**可选**入参 JSON，含 score 字段：
