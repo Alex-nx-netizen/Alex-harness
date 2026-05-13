@@ -1,7 +1,7 @@
 {
   "name": "alex-harness",
-  "version": "0.8.0",
-  "description": "Personal SDLC harness — /helix is the only entrypoint, orchestrating a1-a8 + code-review + meta-audit phases under a Ralph passes contract. v0.8 completes Ralph (failure log + SOUL inject + task_card hash lock), adds OTLP exporter + grep repo-map + dogfood suite, drops a3-retriever and mode-router-coarse from default chain.",
+  "version": "0.8.1",
+  "description": "Personal SDLC harness — /helix is the only entrypoint, orchestrating a1-a8 + code-review + meta-audit phases under a Ralph passes contract. v0.8.1 adds anti-redundancy stack (Karpathy/Lean rules in CLAUDE.md + code-simplifier skill + monthly refactor-cycle), shared lib extraction (_meta/lib/common.cjs with nowBJ/safeAppend/stripBom/safeReadJsonl/printResult; ~120 lines deduped across 14 skills), and TTY-aware terminal output (-75~94% lines in human mode, 100% pipeline-safe). F-026 BOM defense baked into safeReadJsonl.",
   "author": {
     "name": "Alex-nx-netizen",
     "url": "https://github.com/Alex-nx-netizen"
