@@ -45,6 +45,32 @@ function stripBom(s) {
 }
 
 /**
+ * 解析项目根目录，cwd 无关（F-027 防御）。
+ *
+ * 优先级：
+ *   1. `HARNESS_PROJECT_ROOT` env（helix spawn 子 skill 时已设此变量，line 334）
+ *   2. `CLAUDE_PROJECT_DIR` env（Claude Code 标准注入）
+ *   3. `process.cwd()`（仅当 cwd 含 `_meta/` 时才认；防被 cwd 切换骗）
+ *   4. 锚到 common.cjs 自身位置（`_meta/lib/common.cjs` → `../..` = 项目根）
+ *
+ * 同源问题：F-025（dashboard plugin cache fallback）+ user 报"helix state 在 --start 后被 cwd 切换吞掉"。
+ *
+ * @returns {string} 项目根目录绝对路径
+ */
+function projectRoot() {
+  const env = process.env.HARNESS_PROJECT_ROOT || process.env.CLAUDE_PROJECT_DIR;
+  if (env && require("fs").existsSync(require("path").join(env, "_meta"))) {
+    return env;
+  }
+  const cwd = process.cwd();
+  if (require("fs").existsSync(require("path").join(cwd, "_meta"))) {
+    return cwd;
+  }
+  // 锚到本文件位置：_meta/lib/common.cjs → ../.. = 项目根
+  return require("path").resolve(__dirname, "..", "..");
+}
+
+/**
  * 安全读取 jsonl：strip BOM + 按 /\r?\n/ split（F-023 CRLF 防御）+ filter 空行。
  * 返回解析后对象数组；遇 parse 错抛带行号的异常，调用者必须捕获。
  */
@@ -112,4 +138,4 @@ function printResult(result, opts = {}) {
   }
 }
 
-module.exports = { nowBJ, safeAppend, stripBom, safeReadJsonl, printResult };
+module.exports = { nowBJ, safeAppend, stripBom, safeReadJsonl, printResult, projectRoot };

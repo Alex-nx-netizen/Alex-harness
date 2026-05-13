@@ -9,11 +9,30 @@
 |---|---|---|
 | **✅ 已修（Fixed）** | F-008 · F-010 · F-011 · F-012 · F-013 · F-014 · F-015 · F-016 · F-017 · F-018 · F-019 · F-020 · F-021 · F-022 · F-023 · F-024 · F-025 | 当时 bug 已 hotfix；长期候选另作新议案 |
 | **📐 设计洞察（Design）** | F-001 · F-002 · F-003 · F-004 · F-005 · F-006 · F-007 · F-009 | 工具/API 限制 + 元思想原则；不是 bug |
-| **🟢 当前活跃（Active）** | F-026（已 hotfix，但根因未防）| 新发现的活跃问题用 F-027 起编号 |
+| **🟢 当前活跃（Active）** | F-026 · F-027（皆已 hotfix）| 新发现的活跃问题用 F-028 起编号 |
 
 > **新增 finding 守则**：编号从 F-026 起递增；写入时必须明示状态（**fixed** / **design** / **active**），并把它登记到上表。状态变化（active → fixed）同步本表，否则视为流程外。
 
 ## 已验证（Confirmed）
+
+### F-027: `helix --start` 后 cwd 切换让 state 文件"丢失"（status=fixed-but-13-others-vulnerable）
+
+- **来源**：2026-5-13 用户报告 "helix state 在 --start 后被 cwd 切换吞掉了（工具侧问题，不影响代码）。手动收尾汇报"
+- **现象**：helix `run.cjs` 第 24 行 `const PROJECT_DIR = process.cwd()`。`--start` 时 cwd=A → state 写到 `A/_meta/.helix-current-run.json`；后续 `--report` / `--finalize` / `--status` 若 cwd=B → 读 `B/_meta/.helix-current-run.json` → 看似"no active run"，实际是被 cwd 切换骗了
+- **结论**：所有"读项目内文件"的 skill 都不该信任 `process.cwd()`；要么用 env 锚，要么用 `__dirname` 锚
+- **解决（这次，helix 单点）**：
+  - `_meta/lib/common.cjs` 新增 `projectRoot()`，多层回退：`HARNESS_PROJECT_ROOT` env → `CLAUDE_PROJECT_DIR` env → 含 `_meta/` 的 cwd → `path.resolve(__dirname, '..', '..')`（锚到 common.cjs 自身位置）
+  - `skills/helix/run.cjs` 第 24 行 `process.cwd()` → `projectRoot()`
+  - 4 场景验证：cwd 在项目根 / cwd 在 /tmp / env 显式注入 / helix --status 从 /tmp 跑 — 全部正确解析到项目根
+- **解决（长期，未做，排进 cycle #2）**：13 个 skill run.cjs 仍用 `process.cwd()`（grep `'process\.cwd()'`），多数被 helix spawn 时 cwd 已正确传入而幸免，但单独跑就坏。下次 cycle 批量替换为 `projectRoot()`：
+  ```
+  a1 a3 a4 a5 a7 a8 a2 a6 code-review code-simplifier meta-audit （helix 已修）
+  evolution-tracker / session-reporter 用法不同需评估
+  ```
+- **影响**：同源 F-025（dashboard plugin cache fallback）+ F-020（session-reporter Stop hook ENOENT）。三者根因都是"用 cwd 隐式定位项目"
+- **关联**：`_meta/lib/common.cjs` `projectRoot()` / 铁律 #8 边缘扩展
+
+---
 
 ### F-026: `_meta/helix-runs.jsonl` 首行 BOM 让 JSON.parse 静默失败（status=active-root-cause）
 

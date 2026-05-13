@@ -18,10 +18,11 @@
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
-const { nowBJ, safeAppend } = require("../../_meta/lib/common.cjs");
+const { nowBJ, safeAppend, projectRoot } = require("../../_meta/lib/common.cjs");
 const { spawnSync } = require("child_process");
 
-const PROJECT_DIR = process.cwd();
+// v0.8.1+：用 projectRoot() 解析，cwd 无关（修复 user 报"helix state 在 --start 后被 cwd 切换吞掉"）
+const PROJECT_DIR = projectRoot();
 const META_DIR = path.join(PROJECT_DIR, "_meta");
 const HELIX_RUNS = path.join(META_DIR, "helix-runs.jsonl");
 const HELIX_STATE = path.join(META_DIR, ".helix-current-run.json");
