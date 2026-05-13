@@ -6,6 +6,46 @@
 
 ## 2026-5-13
 
+### 会话 32：项目体检 8.1 整改（A-H 全做）
+
+- 🧠 **触发**：Alex 在会话 31 落地反冗余三阶段后问"还能如何优化？审查一下" → 多维体检发现 12 个可优化点（最关键：14 处 `nowBJ` 重复 / 15 条 logs 零 feedback / 55MB 孤儿 tmux log / 4 处文档漂移）→ Alex "A-H 全做"
+- 🛠 **A 清磁盘**：删 `tmux-server-37657.log` (55MB) + `tmux-client-37655.log` (20K)；`.gitignore` 第 16 行 `*.log` 已覆盖，无需新增条目
+- 🛠 **B 修文档**：`CLAUDE.md` 4 处 `.claude/skills/` → `skills/`（表格 2 处 + 第 16 行备忘 + 第 86 行必读顺序）；删除"目录变迁备忘"段（行 8-18，标着"v0.1→v0.2 验证后可删"实际留了 5 个月）
+- 🛠 **H findings 分区**：`_meta/findings.md` 加状态总览表（✅ 17 项 fixed / 📐 8 项设计洞察 / 🟢 active 当前为空）；新增编号从 F-026 起；规则要求新 finding 必须标 status 并同步本表
+- 🛠 **E task_plan 刷新**：`_meta/task_plan.md` 当前阶段从"Phase 4 / M4 mode-router"刷到"Phase 8.1 / v0.8.1 反冗余 + 体检"；加 M1-v0.8.1 里程碑总览表（8 行）；加本阶段 8 子任务（8.1.A-H）；保留 M1-M3 历史子任务作为记录
+- 🛠 **C 标 user_feedback（15 条 → 100% 已审）**：
+  - 新建 `_meta/audit_fill_feedback.cjs`（70 行）按内容签名分类
+  - 全部 15 条 entry 标为 `bootstrap_test`（13）或 `smoke_test`（2）—— 没有真实用户任务 run
+  - 新增字段 `user_feedback.bootstrap_status` 让 evolution-tracker 后续可过滤
+  - `rating` 留 null，等真实 run 时手动填；写后全 6 个 jsonl 全行 parse OK（铁律 #8）
+- 🛠 **D 抽 `_meta/lib/common.cjs`（最大收益）**：
+  - 调研：14 个 skill 各自定义 `nowBJ`（字节一致）、6 个定义 `safeAppend`（仅注释 1 字符差异）= textbook 跨文件冗余
+  - 新建 `_meta/lib/common.cjs`（35 行）导出 `{ nowBJ, safeAppend }`
+  - 写 `_meta/migrate_to_common_lib.cjs`（85 行）一次性迁移：多行正则匹配函数块 → 删；找第一段 require → 后插入 lib require
+  - dry-run + apply：14 个 skill 全部迁移（a1-a8 / code-review / code-simplifier / helix / meta-audit / session-reporter / mode-router）；总省 ~4500 字节 / ~120 行
+  - 余 1 变体（mode-router 的 `safeAppend(logPath, obj)` 参数名异）手工 Edit 合并
+  - 冒烟：全 14 skill 用 `'{}'` 跑过；code-simplifier 25/25 完整工作流验证；所有 logs/runs.jsonl 仍 100% parse OK
+- 🛠 **G rotate 接入**：
+  - `_meta/rotate.cjs` 已存在 v0.7 期落地，孤立未挂；`hooks/hooks.json` 是空 `{}`
+  - 新建 `_meta/rotate_check.cjs`（55 行）：扫所有 jsonl，超 100KB 列建议命令；当前状态 ✅ 全 < 100KB
+  - `_meta/refactor-cycle.md` 加 Step 0：月度 cycle 第一步先跑 rotate_check + rotate（把"轮转"绑定到"月度责任"，不靠 cron）
+- 🛠 **F 大重构评估（context-curator 1011 行 / helix 746 行）**：
+  - context-curator 含 safeAppendJsonl 的 SNAPSHOTS_DIR 防越权检查等正当复杂度，简单拆分有风险
+  - helix run.cjs 14 个函数，phase_report 解析与 cmdFinalize 是自然拆分点
+  - **决定**：今天不做；列入下次 cycle（#2，预计 2026-6-1）issue 2/3；本次 cycle 只完成 issue 1 = D 的共享 lib 抽取
+- 📌 **教训 / 设计决定**：
+  - **吃自己狗粮**：v0.8.1 上午刚建 code-simplifier，下午体检就发现 14 处 `nowBJ` 重复是 textbook redundancy——证明工具有效但**之前没人跑过**
+  - **"硬规则"和"工具"不能只一边**：CLAUDE.md 写了 10 戒律但 14 处 nowBJ 仍重复 → 规则要靠脚本验证落地，不只靠人自觉
+  - **bootstrap_status 字段是关键创新**：把"我是 demo 数据"明示在结构里，evolution-tracker 不再被冒烟数据污染
+  - **rotate "接 hook" 的真正语义不是 Claude Code hook**（事件驱动），而是"绑定到月度 cycle"（时间驱动）—— 写到 refactor-cycle Step 0 比强行用 hooks.json 更准确
+  - **未一次性切 context-curator/helix**：抗拒"借势全洗"的冲动 → 大重构必须有独立设计文档 + 双 reviewer（santa-method）→ 拆分议案进下次 cycle
+- 📦 **变更文件清单**：
+  - 修改：`CLAUDE.md` / `_meta/findings.md` / `_meta/task_plan.md` / `_meta/refactor-cycle.md` / 14 个 skill run.cjs
+  - 新增：`_meta/lib/common.cjs` / `_meta/audit_fill_feedback.cjs` / `_meta/migrate_to_common_lib.cjs` / `_meta/rotate_check.cjs`
+  - 自动写入（mode-router 冒烟侧效）：`_meta/mode-router-log.jsonl`
+
+---
+
 ### 会话 31：反冗余三阶段落地（CLAUDE.md 硬规则 + code-simplifier skill + 月度 refactor-cycle）
 
 - 🧠 **触发**：Alex "今天新发现一个问题，这个项目插件写的代码，冗余逻辑太多了。调研一下市场" → 调研报告 `design/redundant-code-solutions.md`（13 个来源、5 大类 19 子模式、4 类市场方案） → Alex "全部同时修改优化"，三阶段一起做

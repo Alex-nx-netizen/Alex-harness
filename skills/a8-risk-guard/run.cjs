@@ -5,6 +5,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const { nowBJ } = require("../../_meta/lib/common.cjs");
 const { spawnSync } = require("child_process");
 
 const SKILL_DIR = __dirname;
@@ -29,15 +30,6 @@ const HIGH_PATTERNS = [
   /\boverwrite\b.*\.env/i,
   /CI[\/_-]?(config|pipeline)/i,
 ];
-
-function nowBJ() {
-  const bj = new Date(Date.now() + 8 * 3600 * 1000);
-  const p = (n) => String(n).padStart(2, "0");
-  return (
-    `${bj.getUTCFullYear()}-${bj.getUTCMonth() + 1}-${bj.getUTCDate()} ` +
-    `${p(bj.getUTCHours())}:${p(bj.getUTCMinutes())}:${p(bj.getUTCSeconds())}`
-  );
-}
 
 function classify(opStr) {
   for (const re of CRITICAL_PATTERNS) {

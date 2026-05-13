@@ -18,7 +18,17 @@
 
 ---
 
-## 七步流程（仿 `SilenNaihin /refactor` gist）
+## 七步流程（仿 `SilenNaihin /refactor` gist · 2026-5-13 加 Step 0 轮转）
+
+### Step 0：jsonl 体量检查 + 月度轮转（v0.8.1 加，1 min）
+
+```bash
+node _meta/rotate_check.cjs       # 看哪些 jsonl ≥ 100KB
+node _meta/rotate.cjs             # 归档上个月 helix-runs；自动备份 .bak + 校验
+```
+
+> 把"运行日志归档"放进月度 cycle 的第 0 步，避免 `helix-runs.jsonl` 无限增长。
+> `rotate.cjs` 已含双重校验（归档行 + 主文件每行 parse），失败不删原文件。
 
 ### Step 1：项目体量基线
 

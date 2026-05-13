@@ -28,6 +28,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const { nowBJ, safeAppend } = require("../../_meta/lib/common.cjs");
 const { spawnSync } = require("child_process");
 
 const SKILL_DIR = __dirname;
@@ -67,15 +68,6 @@ function matchAll(text, pats) {
 function isClaudeLLM() {
   const m = process.env.ANTHROPIC_MODEL || process.env.CLAUDE_MODEL || "";
   return m === "" || /claude/i.test(m);
-}
-
-function nowBJ() {
-  const bj = new Date(Date.now() + 8 * 3600 * 1000);
-  const p = (n) => String(n).padStart(2, "0");
-  return (
-    `${bj.getUTCFullYear()}-${bj.getUTCMonth() + 1}-${bj.getUTCDate()} ` +
-    `${p(bj.getUTCHours())}:${p(bj.getUTCMinutes())}:${p(bj.getUTCSeconds())}`
-  );
 }
 
 // --- v0.3 multi-dim scorer (config-driven) ---
@@ -360,13 +352,6 @@ function printRecommendation(taskDesc, r, stage) {
 }
 
 // --- log helpers ---
-function safeAppend(logPath, obj) {
-  const line = JSON.stringify(obj);
-  JSON.parse(line);
-  fs.mkdirSync(path.dirname(logPath), { recursive: true });
-  fs.appendFileSync(logPath, line + "\n", "utf-8");
-}
-
 function reportToHelix(stage, result) {
   if (!fs.existsSync(HELIX_RUN)) return;
   const phase = stage === "coarse" ? "mode-router-coarse" : "mode-router-fine";

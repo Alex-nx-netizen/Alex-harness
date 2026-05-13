@@ -16,6 +16,7 @@
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
+const { nowBJ } = require("../../_meta/lib/common.cjs");
 const { spawnSync } = require("child_process");
 
 const SKILL_DIR = __dirname;
@@ -44,15 +45,6 @@ function stableHash(obj) {
     .update(JSON.stringify(sorted(obj)))
     .digest("hex")
     .slice(0, 16);
-}
-
-function nowBJ() {
-  const bj = new Date(Date.now() + 8 * 3600 * 1000);
-  const p = (n) => String(n).padStart(2, "0");
-  return (
-    `${bj.getUTCFullYear()}-${bj.getUTCMonth() + 1}-${bj.getUTCDate()} ` +
-    `${p(bj.getUTCHours())}:${p(bj.getUTCMinutes())}:${p(bj.getUTCSeconds())}`
-  );
 }
 
 function main() {

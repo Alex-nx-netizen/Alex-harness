@@ -27,6 +27,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const { nowBJ, safeAppend } = require("../../_meta/lib/common.cjs");
 const { spawnSync } = require("child_process");
 
 const SKILL_DIR = __dirname;
@@ -44,22 +45,6 @@ const DIMENSIONS = [
 
 const PASS_THRESHOLD = 16; // ≥16 → passes
 const REVISION_FLOOR = 10; // 10-15 → needs_revision；<10 → 重大问题
-
-function nowBJ() {
-  const bj = new Date(Date.now() + 8 * 3600 * 1000);
-  const p = (n) => String(n).padStart(2, "0");
-  return (
-    `${bj.getUTCFullYear()}-${bj.getUTCMonth() + 1}-${bj.getUTCDate()} ` +
-    `${p(bj.getUTCHours())}:${p(bj.getUTCMinutes())}:${p(bj.getUTCSeconds())}`
-  );
-}
-
-function safeAppend(p, obj) {
-  const line = JSON.stringify(obj);
-  JSON.parse(line); // CLAUDE.md 铁律 #8
-  fs.mkdirSync(path.dirname(p), { recursive: true });
-  fs.appendFileSync(p, line + "\n", "utf-8");
-}
 
 function validateAuditReport(auditReport) {
   const errors = [];

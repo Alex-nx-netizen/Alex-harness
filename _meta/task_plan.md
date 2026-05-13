@@ -1,13 +1,40 @@
 # Task Plan: Personal Agent Harness
 
-## 当前阶段
+## 当前阶段（2026-5-13 体检后刷新）
 
-**Phase 4 / M4（5-1 起）：mode-router (B4) + B2 session-reporter 补全**
+**Phase 8.1 / v0.8.1：反冗余三阶段升级 + 项目体检整改（A-H）**
 
-> **M1 正式关闭**（2026-5-1，task 1.9）：39/45 任务完成；3 skills 建成；meta-loop 全闭合；详见 `_meta/reviews/m1-retrospective.md`
-> **M2 提前完成**（4-29）：evolution-tracker v0.1.0
-> **M3 提前完成**（4-30）：context-curator v0.1.0（B3 adjacent）
-> **执行顺序**（用户 2026-5-1 决策）：① mode-router (B4) → ② B2 补全「推飞书成长日志」
+### 已完成里程碑总览
+
+| 里程碑 | 时间 | 关键产出 |
+|---|---|---|
+| **M1** | 4-28 → 5-1 | knowledge-curator v0.1.0；meta-loop 闭合；39/45 任务（`reviews/m1-retrospective.md`）|
+| **M2** | 4-29 | evolution-tracker v0.1.0（提前完成）|
+| **M3** | 4-30 | context-curator v0.1.0（B3 adjacent，提前完成）|
+| **M4** | 5-1 → 5-2 | mode-router (B4) + B2 session-reporter 补全 |
+| **v0.7** | 5-2 → 5-4 | dashboard / hooks / e2e fixtures / Worker A 升级 |
+| **v0.7.2** | 5-11 | code-review skill + 5 维评分 + soft-fail（10 phase）|
+| **v0.8.0** | 5-12 | 12-item upgrade — Ralph completion + OTLP + dogfood + drops |
+| **v0.8.1** | 5-13 | **反冗余三阶段**（CLAUDE.md 硬规则 + code-simplifier + refactor-cycle）|
+
+### 本阶段子任务（v0.8.1 体检整改 · 5-13 ~ 进行中）
+
+| # | 任务 | 状态 | 备注 |
+|---|------|------|------|
+| 8.1.A | 删 `tmux-*.log`（55MB）+ 验 `.gitignore` 覆盖 | ✅ 完成 | 已确认 `*.log` 覆盖；释放磁盘 |
+| 8.1.B | CLAUDE.md 4 处 `.claude/skills/` → `skills/` + 删过期 11 行 | ✅ 完成 | - |
+| 8.1.H | findings.md 加状态总览（✅/📐/🟢）；下编号 F-026 | ✅ 完成 | - |
+| 8.1.E | task_plan.md 刷新到 v0.8.1（本次）| 🚧 进行中 | - |
+| 8.1.C | 给 14 条已有 logs/runs.jsonl 标注 user_feedback | ⏳ 计划 | bootstrap test 标 test_scenario；real run 留草案 |
+| 8.1.D | 抽 `_meta/lib/common.cjs`（nowBJ/safeAppend/DIMENSIONS）| ⏳ 计划 | 14 处去重；吃 code-simplifier 狗粮 |
+| 8.1.G | `_meta/rotate.cjs` 接 hook 自动轮转 jsonl | ⏳ 计划 | helix-runs.jsonl 84KB |
+| 8.1.F | 月度 refactor cycle issue 2/3 评估（context-curator 1011 行 / helix 746 行 拆分）| ⏳ 评估后再决定 | 多小时大重构，可能挪到下次 cycle |
+
+### 下一阶段候选（M5+）
+
+- **M5 候选**: 把 evolution-tracker 接到 logs/runs.jsonl 真实输入（前提：8.1.C 把 feedback 填起来）
+- **plugin 发布**: v0.8.1 后是否往 `claude plugin marketplace` 推动一次外部试用
+- **Dashboard 演进**: 加 code-simplifier / code-review trend 图卡（基于 logs/runs.jsonl）
 
 ## Phase 0 子任务（已完成）
 

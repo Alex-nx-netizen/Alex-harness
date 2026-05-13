@@ -5,18 +5,6 @@
 > 状态：v0.1（蓝图已整合，进入 Phase 1 / M1），持续迭代。
 > 工作目录：`/Users/a1234/person/ai/study/Alex-harness/`（2026-5-8 从 Win `E:\ai\study\person\Alex-harness\` 迁 mac；4-28 在 Win 下从 `E:\ai\study\person\harness\` 重命名）
 
-## 📌 目录变迁备忘（v0.1 → v0.2 之间，验证后可删）
-
-- **当前工作目录**：`/Users/a1234/person/ai/study/Alex-harness/`（mac）
-- **memory 路径变迁链**（每次目录改名都要 cp 一次）：
-  - `~/.claude/projects/E--ai-study-person/memory/` → 起源（Win）
-  - `~/.claude/projects/E--ai-study-person-harness/memory/` → 4-28 Win 下第一次迁
-  - `~/.claude/projects/E--ai-study-person-Alex-harness/memory/` → 4-28 Win 下第二次迁（会话 8 完成 cp）
-  - `~/.claude/projects/-Users-a1234-person-ai-study-Alex-harness/memory/` → **当前**（2026-5-8 Win → mac 迁；如 mac 端无对应 memory 目录，下次会话需手动 cp）
-- **knowledge-curator 项目级副本**位于 `.claude/skills/knowledge-curator/`（含 logs/runs.jsonl，3 条记录）；**全局 skill** 位于 `~/.claude/skills/knowledge-curator/`，两者目前可能 logs 不同步——后续单 source-of-truth 决策看 M2/M3。
-- **教训**：每次重命名工作目录都要手动 cp memory，因为 Claude Code 按目录路径生成新 memory 目录名，不会自动迁移。
-- **2026-5-8 迁 mac**：Alex 在 mac 重开项目，活跃文件 Win 路径已批量替换为 mac 路径（见 `_meta/progress.md` 会话 29）；本"目录变迁备忘"段历史链保留作为事实记录，未删。
-
 ## 项目定位
 
 **是什么**：一组协作的 skill + 文档 + 工作流，让 Claude 在帮我做事时更可控、可观测、可演进。
@@ -39,8 +27,8 @@
 | `_meta/sync_task_plan.cjs` | task_plan.md → task_plan.jsonl 单向同步脚本（绝不改 md） | Claude 维护 |
 | `_meta/progress.md` | 执行日志，每次产出追加（最新在最上面） | Claude 维护 |
 | `_meta/findings.md` | 学到的、踩过的坑、待验证的假设、死路 | Claude 维护 |
-| `.claude/skills/` | 项目级 skill（即将提交 GitHub） | Claude 实现，用户审 |
-| `.claude/skills/knowledge-curator/` | v0.1.0 已落地，整理输入 → 飞书 | - |
+| `skills/` | 项目级 skill（已提交 GitHub） | Claude 实现，用户审 |
+| `skills/knowledge-curator/` | v0.1.0 已落地，整理输入 → 飞书 | - |
 
 ## 工作约定（铁律）
 
@@ -83,7 +71,7 @@
 2. `_meta/task_plan.md`（当前阶段/子任务）
 3. `_meta/progress.md` 最新 1-3 条（上次到哪了）
 4. 如果任务涉及蓝图：`design/harness-blueprint.md`
-5. 如果任务涉及具体 skill：对应 `.claude/skills/<name>/SKILL.md`
+5. 如果任务涉及具体 skill：对应 `skills/<name>/SKILL.md`
 
 ### 用户偏好
 - 直接给推荐 + 主要 trade-off，不要罗列 5 个选项

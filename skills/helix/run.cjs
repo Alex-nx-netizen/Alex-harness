@@ -18,6 +18,7 @@
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
+const { nowBJ, safeAppend } = require("../../_meta/lib/common.cjs");
 const { spawnSync } = require("child_process");
 
 const PROJECT_DIR = process.cwd();
@@ -57,15 +58,6 @@ const SOFT_PHASES = ["code-review"];
 // knowledge-curator / session-reporter 不在 PHASES_GOVERNANCE，因为它们在 finalize 后或 Stop hook 触发
 const PHASES_GOVERNANCE = ["evolution-tracker", "context-curator"];
 
-function nowBJ() {
-  const bj = new Date(Date.now() + 8 * 3600 * 1000);
-  const p = (n) => String(n).padStart(2, "0");
-  return (
-    `${bj.getUTCFullYear()}-${bj.getUTCMonth() + 1}-${bj.getUTCDate()} ` +
-    `${p(bj.getUTCHours())}:${p(bj.getUTCMinutes())}:${p(bj.getUTCSeconds())}`
-  );
-}
-
 function genRunId() {
   // 紧凑形式：YYYY-M-D-HHMMSS
   const bj = new Date(Date.now() + 8 * 3600 * 1000);
@@ -78,13 +70,6 @@ function genRunId() {
 
 function ensureMeta() {
   fs.mkdirSync(META_DIR, { recursive: true });
-}
-
-function safeAppend(p, obj) {
-  const line = JSON.stringify(obj);
-  JSON.parse(line); // CLAUDE.md 铁律 #8：写 JSONL 立刻校验
-  fs.mkdirSync(path.dirname(p), { recursive: true });
-  fs.appendFileSync(p, line + "\n", "utf-8");
 }
 
 function readState() {
