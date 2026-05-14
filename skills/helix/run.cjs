@@ -69,6 +69,21 @@ function genRunId() {
   );
 }
 
+// v0.9：解析 nowBJ 输出的字符串（YYYY-M-D HH:MM:SS）→ epoch ms
+// 用于计算 stale current-run 的年龄；不依赖系统时区
+function parseBJ(s) {
+  const m = String(s || "").match(
+    /^(\d{4})-(\d{1,2})-(\d{1,2})\s+(\d{1,2}):(\d{1,2}):(\d{1,2})$/,
+  );
+  if (!m) return 0;
+  const [, y, mo, d, h, mi, se] = m.map(Number);
+  return Date.UTC(y, mo - 1, d, h, mi, se) - 8 * 3600 * 1000;
+}
+
+// v0.9：stale 阈值 — 超过这个时长的 current-run 自动 abandoned
+// 数据依据：2026-5-13 体检发现 9/35 = 25.7% 触发 abort_stale（>30min 用户根本不会回来 finalize）
+const STALE_MS = 30 * 60 * 1000;
+
 function ensureMeta() {
   fs.mkdirSync(META_DIR, { recursive: true });
 }
@@ -117,29 +132,58 @@ function stableHash(obj) {
 
 // --- subcommands ---
 
-function cmdStart(task) {
-  const taskStr = (task || "").trim();
+function cmdStart(args) {
+  // v0.9：解析 --deep flag — 默认 minimal mode（仅 start+finalize，不强求 9 phase）
+  // 数据驱动：2026-5 体检 24/24 finalize phases_run=0，用户实际工作流就是 minimal
+  let deep = false;
+  const taskParts = [];
+  for (const a of args || []) {
+    if (a === "--deep") deep = true;
+    else taskParts.push(a);
+  }
+  const taskStr = taskParts.join(" ").trim();
+  const mode = deep ? "deep" : "minimal";
   const helix_run_id = genRunId();
 
   ensureMeta();
-  // 若有残留 state，先 abort 上一次（不阻塞，记录残留）
+  // v0.9：旧 state 处理 — >30min 自动 abandoned，否则保留旧 abort_stale 流程
   const prev = readState();
   if (prev) {
-    safeAppend(HELIX_RUNS, {
-      helix_run_id: prev.helix_run_id,
-      type: "abort_stale",
-      reason: "new --start invoked while previous run still active",
-      ts: nowBJ(),
-    });
+    const prevStartedMs = parseBJ(prev.started_at);
+    const ageMs = prevStartedMs > 0 ? Date.now() - prevStartedMs : 0;
+    if (ageMs > STALE_MS) {
+      safeAppend(HELIX_RUNS, {
+        helix_run_id: prev.helix_run_id,
+        type: "finalize",
+        status: "abandoned",
+        promise: "ABANDONED",
+        passes_all: false,
+        phases_run: (prev.phase_reports || []).length,
+        reason: `auto-abandoned: stale >${Math.round(STALE_MS / 60000)}min (age=${Math.round(ageMs / 60000)}min)`,
+        task: (prev.task || "").slice(0, 200),
+        started_at: prev.started_at,
+        finished_at: nowBJ(),
+        mode: prev.mode || "deep",
+      });
+    } else {
+      safeAppend(HELIX_RUNS, {
+        helix_run_id: prev.helix_run_id,
+        type: "abort_stale",
+        reason: "new --start invoked while previous run still active",
+        ts: nowBJ(),
+      });
+    }
   }
 
+  const phasesPlanned = mode === "deep" ? PHASES_DEFAULT : [];
   const startEntry = {
     helix_run_id,
     type: "start",
     task: taskStr.slice(0, 500),
     project_dir: PROJECT_DIR,
     status: "started",
-    phases_planned: PHASES_DEFAULT,
+    mode,
+    phases_planned: phasesPlanned,
     ts: nowBJ(),
   };
   safeAppend(HELIX_RUNS, startEntry);
@@ -147,6 +191,7 @@ function cmdStart(task) {
     helix_run_id,
     started_at: nowBJ(),
     task: taskStr,
+    mode,
     phase_reports: [],
   });
 
@@ -166,27 +211,40 @@ function cmdStart(task) {
     soulNote = "SOUL.md 不存在（项目尚未沉淀稳定规则）；evolution-tracker --promote-soul --apply 会创建";
   }
 
+  // v0.9：minimal mode 输出极简 plan，不要求 9 phase；--deep 才回到完整 Ralph 契约
+  const minimalInstructions = [
+    "**第一件事**：读上面的 soul.content（若 present=true）作为本 run 不可变行为规则",
+    "v0.9 minimal mode：你直接干活即可，不强制跑 9 phase（数据驱动：2026-5 体检 24/24 phases_run=0）",
+    "破坏性操作（git push --force / rm -rf / drop / 改 CI 等）→ 仍必须先 a8-risk-guard",
+    "做完后 → node skills/helix/run.cjs --finalize，promise=COMPLETE_MINIMAL",
+    "需要完整 9 phase 流程时用 --deep flag 重启",
+  ];
+  const deepInstructions = [
+    "**第一件事**：读上面的 soul.content（若 present=true）作为本 run 不可变行为规则",
+    "你必须严格按 phases 顺序执行；每个 phase 调用对应 run.cjs（脚本会自动 --report 给 helix）",
+    "任何 phase passes=false → 立刻暂停 + 报告用户决策；不自动重试（Ralph 反对自宣告）",
+    "破坏性操作（git push --force / rm -rf / drop / 改 CI 等）→ 强制 inject a8-risk-guard",
+    "全部 phase 完成 → node skills/helix/run.cjs --finalize 检查 promise",
+  ];
   const plan = {
     helix_run_id,
-    promise: "NOT_COMPLETE",
+    mode,
+    promise: mode === "minimal" ? "PENDING_MINIMAL" : "NOT_COMPLETE",
     project_dir: PROJECT_DIR,
     soul: {
       present: soulContent !== null,
       note: soulNote,
-      content: soulContent, // 全文注入，LLM 必读
+      content: soulContent,
     },
-    instructions: [
-      "**第一件事**：读上面的 soul.content（若 present=true）作为本 run 不可变行为规则；冲突时 SOUL.md 高于默认行为",
-      "你必须严格按 phases 顺序执行；每个 phase 调用对应 run.cjs（脚本会自动 --report 给 helix）",
-      "任何 phase passes=false → 立刻暂停 + 报告用户决策；不自动重试（Ralph 反对自宣告）",
-      "破坏性操作（git push --force / rm -rf / drop / 改 CI 等）→ 强制 inject a8-risk-guard",
-      "全部 phase 完成 → node skills/helix/run.cjs --finalize 检查 promise",
-    ],
-    phases: PHASES_DEFAULT.map((p, i) => ({
-      step: i + 1,
-      phase: p,
-      cmd: `node skills/${p}/run.cjs '<input-json>'`,
-    })),
+    instructions: mode === "minimal" ? minimalInstructions : deepInstructions,
+    phases:
+      mode === "minimal"
+        ? []
+        : PHASES_DEFAULT.map((p, i) => ({
+            step: i + 1,
+            phase: p,
+            cmd: `node skills/${p}/run.cjs '<input-json>'`,
+          })),
     risk_guard: {
       cmd: `node skills/a8-risk-guard/run.cjs '<operation-json>'`,
       when: "任何破坏性/不可逆操作之前；passes=false 则 ABORT",
@@ -194,7 +252,9 @@ function cmdStart(task) {
     finalize: {
       cmd: `node skills/helix/run.cjs --finalize`,
       output:
-        "helix-runs.jsonl 收尾行 + progress.md append（Ralph 追加式学习日志）",
+        mode === "minimal"
+          ? "helix-runs.jsonl 收尾行（promise=COMPLETE_MINIMAL）+ progress.md append"
+          : "helix-runs.jsonl 收尾行 + progress.md append（Ralph 追加式学习日志）",
     },
   };
   console.log(JSON.stringify(plan, null, 2));
@@ -296,6 +356,7 @@ function cmdFinalize() {
     process.exit(1);
   }
   const reports = state.phase_reports || [];
+  const isMinimal = state.mode === "minimal";
   // v0.7.2：SOFT_PHASES（如 code-review）失败不计入 allPasses；只进 soft_failures + warnings
   const blockingReports = reports.filter(
     (r) => !SOFT_PHASES.includes(r.phase),
@@ -309,7 +370,14 @@ function cmdFinalize() {
   const failed = blockingReports
     .filter((r) => !r.passes)
     .map((r) => r.phase);
-  const promise = allPasses ? "COMPLETE" : "NOT_COMPLETE";
+  // v0.9：minimal mode → promise=COMPLETE_MINIMAL（不卡 phases_run=0，承认用户工作流）
+  // deep mode → 维持 Ralph 原契约（全 passes 才 COMPLETE）
+  let promise;
+  if (isMinimal) {
+    promise = failed.length > 0 ? "NOT_COMPLETE" : "COMPLETE_MINIMAL";
+  } else {
+    promise = allPasses ? "COMPLETE" : "NOT_COMPLETE";
+  }
 
   // v0.7 B3：治理元软约束——若 PHASES_GOVERNANCE 没跑过，警告但不卡 promise
   const phaseSet = new Set(reports.map((r) => r.phase));
@@ -320,15 +388,39 @@ function cmdFinalize() {
   // 关闭方式：HARNESS_AUTO_GOVERNANCE=off
   const autoGovernance = process.env.HARNESS_AUTO_GOVERNANCE !== "off";
   const governanceResults = [];
+  // v0.9 P4：plugin 安装目录的 fallback —— 外部业务项目下 PROJECT_DIR 没有 skills/，要回退到 plugin
+  // __dirname = <plugin>/skills/helix，所以 <plugin>/skills/<gp>/run.cjs 是 fallback
+  const pluginSkillsDir = path.resolve(__dirname, "..");
+  // v0.9 P4：evolution-tracker 无参数会 print usage exit 2；fire-and-forget 用 read-only 模式
+  const GOVERNANCE_ARGS = {
+    "evolution-tracker": ["--promote-soul", "--dry-run"],
+    "context-curator": [],
+  };
   if (autoGovernance) {
     for (const gp of governanceMissing.slice()) {
-      const govScript = path.join(PROJECT_DIR, "skills", gp, "run.cjs");
+      let govScript = path.join(PROJECT_DIR, "skills", gp, "run.cjs");
+      let resolvedFrom = "project";
       if (!fs.existsSync(govScript)) {
-        governanceResults.push({ phase: gp, status: "skip", reason: "script not found" });
-        continue;
+        const fb = path.join(pluginSkillsDir, gp, "run.cjs");
+        if (fs.existsSync(fb)) {
+          govScript = fb;
+          resolvedFrom = "plugin";
+        } else {
+          governanceResults.push({
+            phase: gp,
+            status: "skip",
+            reason: "script not found (project+plugin both miss)",
+            tried: [
+              path.join(PROJECT_DIR, "skills", gp, "run.cjs"),
+              fb,
+            ],
+          });
+          continue;
+        }
       }
       try {
-        const r = spawnSync("node", [govScript], {
+        const extraArgs = GOVERNANCE_ARGS[gp] || [];
+        const r = spawnSync("node", [govScript, ...extraArgs], {
           encoding: "utf-8",
           cwd: PROJECT_DIR,
           timeout: 8000,
@@ -338,11 +430,12 @@ function cmdFinalize() {
         governanceResults.push({
           phase: gp,
           status: ok ? "ok" : "fail",
+          resolved_from: resolvedFrom,
+          args: extraArgs,
           exit: r.status,
           stderr_tail: (r.stderr || "").slice(-200),
         });
         if (ok) {
-          // 从 missing 列表里去掉
           governanceMissing = governanceMissing.filter((p) => p !== gp);
         }
       } catch (e) {
@@ -417,6 +510,7 @@ function cmdFinalize() {
     helix_run_id: state.helix_run_id,
     type: "finalize",
     status: "done",
+    mode: state.mode || "deep",
     promise,
     passes_all: allPasses,
     phases_run: reports.length,
@@ -430,9 +524,13 @@ function cmdFinalize() {
     task: (state.task || "").slice(0, 200),
     started_at: state.started_at,
     finished_at: nowBJ(),
-    note: allPasses
-      ? "Ralph 契约：promise=COMPLETE 仅机器判定，归档由用户人审"
-      : `${failed.length} phase 未通过，需用户决策（不自动重试）`,
+    note: isMinimal
+      ? promise === "COMPLETE_MINIMAL"
+        ? "v0.9 minimal mode：无 phase 失败，承认用户直接干活的工作流"
+        : `${failed.length} phase 未通过（minimal mode 也尊重失败），需用户决策`
+      : allPasses
+        ? "Ralph 契约：promise=COMPLETE 仅机器判定，归档由用户人审"
+        : `${failed.length} phase 未通过，需用户决策（不自动重试）`,
   };
   safeAppend(HELIX_RUNS, finalEntry);
 
@@ -483,6 +581,13 @@ function cmdFinalize() {
     // 不阻塞 finalize
     console.error(`[helix] otlp exporter load failed: ${e.message}`);
   }
+
+  // v0.9 P3：兜底清理 a2 历史遗留的 `<root>/_tmp_repo_ctx.json`（如果存在）
+  // 不删 `_meta/repo-ctx-snapshot.json`，它是当次 run 的 ctx 快照，留给下次 a2 覆盖
+  try {
+    const legacy = path.join(PROJECT_DIR, "_tmp_repo_ctx.json");
+    if (fs.existsSync(legacy)) fs.unlinkSync(legacy);
+  } catch (_) {}
 
   clearState();
   console.log(JSON.stringify(finalEntry, null, 2));
@@ -711,7 +816,7 @@ async function main() {
   const args = process.argv.slice(2);
   const sub = args[0];
   if (sub === "--start") {
-    cmdStart(args.slice(1).join(" "));
+    cmdStart(args.slice(1));
   } else if (sub === "--report") {
     cmdReport(args[1], args[2] || "{}");
   } else if (sub === "--finalize") {

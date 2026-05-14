@@ -1078,3 +1078,15 @@
 - 已修: 否
 - 复盘 link: 待写（findings.md F-NNN 或 progress.md 同会话）
 - task: test #10 hash mutation
+
+### /helix run 2026-5-14-100314 · "smoke minimal"
+- promise: **COMPLETE_MINIMAL**
+- phases: (none reported)
+- task: smoke minimal
+- started → finished: 2026-5-14 10:03:14 → 2026-5-14 10:03:24
+
+### /helix run 2026-5-14-100635 · "smoke v0.9 P4"
+- promise: **COMPLETE_MINIMAL**
+- phases: (none reported)
+- task: smoke v0.9 P4
+- started → finished: 2026-5-14 10:06:35 → 2026-5-14 10:06:35

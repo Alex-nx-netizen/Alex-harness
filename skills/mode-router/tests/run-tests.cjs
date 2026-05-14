@@ -217,6 +217,94 @@ console.log("\nT6 manager_worker 阈值 = 6");
   );
 }
 
+// R 系列：v0.9 真实日志回归（基于 2026-5 真实使用样本，已脱敏）
+// 旧版正则 100% 漏匹配中文 task_desc，R1-R5 保证不再回退
+console.log("\n--- R series: real-log regression (v0.9) ---");
+
+console.log("\nR1 真实样本：跨端任务（接口+页）应触发 cross_domain");
+{
+  const r = runFine({
+    task: "对接已发布的接口 + 新建相册详情页 + 跳转链路收口 + 自测",
+    files_changed_count: 3,
+    steps_count: 4,
+  });
+  assert(
+    "R1.has cross_domain",
+    r.breakdown && r.breakdown.cross_domain > 0,
+    `breakdown=${JSON.stringify(r.breakdown)}`,
+  );
+  assert("R1.score>0", r.score > 0, `score=${r.score}`);
+}
+
+console.log("\nR2 真实样本：纯后端 controller/repository → score>0");
+{
+  const r = runFine({
+    task: "调研 controller 入口的自动退款倒计时逻辑，定位 service 写在哪个 repository",
+    files_changed_count: 2,
+    steps_count: 3,
+  });
+  assert(
+    "R2.matched backend",
+    r.signals && r.signals.backend && r.signals.backend.length > 0,
+    `backend signals=${JSON.stringify(r.signals && r.signals.backend)}`,
+  );
+  // 单端任务不要求达 team 阈值，但至少要有信号
+  assert(
+    "R2.has long_task or backend signal logged",
+    r.score > 0 || (r.signals.backend && r.signals.backend.length > 0),
+    `score=${r.score}`,
+  );
+}
+
+console.log("\nR3 真实样本：纯前端表单/弹窗 → 命中 frontend 信号");
+{
+  const r = runFine({
+    task: "上传文件页表单修复：自动写文案默认关闭；用户偏好默认收起；弹窗按钮对齐设计稿",
+    files_changed_count: 2,
+    steps_count: 3,
+  });
+  assert(
+    "R3.matched frontend",
+    r.signals && r.signals.frontend && r.signals.frontend.length > 0,
+    `frontend signals=${JSON.stringify(r.signals && r.signals.frontend)}`,
+  );
+}
+
+console.log("\nR4 真实样本：长 cross-domain 任务（>100 字） → 应进 team");
+{
+  const r = runFine({
+    task:
+      "三段任务：(1) /init 初始化项目；约束图片处理（后端返相对路径 + 域名接口）；建本地 .claude/ 目录存所有产物（含 CLAUDE.md），加 .gitignore；(2) 核对 lib/modules 是否对应 3 张截图；理清模块逻辑；(3) 整理跳转逻辑 + 接口逻辑，生成文档",
+    files_changed_count: 5,
+    steps_count: 6,
+  });
+  assert(
+    "R4.has cross_domain",
+    r.breakdown && r.breakdown.cross_domain > 0,
+    `breakdown=${JSON.stringify(r.breakdown)}`,
+  );
+  assert(
+    "R4.has long_task",
+    r.breakdown && r.breakdown.long_task > 0,
+    `breakdown=${JSON.stringify(r.breakdown)}`,
+  );
+  assert("R4.mode=team", r.mode === "team", `mode=${r.mode}, score=${r.score}`);
+}
+
+console.log("\nR5 真实样本：rest/spring controller → backend 信号");
+{
+  const r = runFine({
+    task: "Spring controller 用 @PreAuthorize 拦截 REST 接口返回 403，定位是哪个注解配错",
+    files_changed_count: 1,
+    steps_count: 2,
+  });
+  assert(
+    "R5.matched backend",
+    r.signals && r.signals.backend && r.signals.backend.length > 0,
+    `backend=${JSON.stringify(r.signals && r.signals.backend)}`,
+  );
+}
+
 console.log(`\n=== ${pass} passed, ${fail} failed ===`);
 if (fail > 0) {
   console.log("\nFailures:");

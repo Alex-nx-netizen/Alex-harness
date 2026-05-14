@@ -110,7 +110,8 @@ function score(taskDesc, planSignals) {
       breakdown.cross_domain = W.frontend_backend_cross;
       total += W.frontend_backend_cross;
     }
-    if (text.length > 150) {
+    const longTaskChars = (CFG.thresholds && CFG.thresholds.long_task_chars) || 100;
+    if (text.length > longTaskChars) {
       breakdown.long_task = W.long_task;
       total += W.long_task;
     }

@@ -176,10 +176,19 @@ function main() {
 
   const out = JSON.stringify(ctx, null, 2);
 
-  // Write to tmp for helix to read
-  const tmpPath = path.join(root, "_tmp_repo_ctx.json");
+  // v0.9：曾经写 `<root>/_tmp_repo_ctx.json` 中转给 helix 用，实际无 phase 读取（死代码）。
+  // 历史污染：外部业务项目根目录都遗留该文件。
+  // 现在：把完整 ctx 写到 `_meta/repo-ctx-snapshot.json`（meta 内部，不污染项目根），
+  // 同时 unlink 旧的 `<root>/_tmp_repo_ctx.json`（如果存在），向后兼容清理
+  const metaDir = path.join(root, "_meta");
+  if (!fs.existsSync(metaDir)) fs.mkdirSync(metaDir, { recursive: true });
+  const tmpPath = path.join(metaDir, "repo-ctx-snapshot.json");
   fs.writeFileSync(tmpPath, out, "utf-8");
   process.stderr.write(`[a2-repo-sensor] RepoContext written to ${tmpPath}\n`);
+  const legacyPath = path.join(root, "_tmp_repo_ctx.json");
+  if (fs.existsSync(legacyPath)) {
+    try { fs.unlinkSync(legacyPath); } catch (_) {}
+  }
 
   // Ralph passes 判定：成功扫到根目录 + 至少识别 1 项（key_file/tech/commit）即 pass
   const passes =

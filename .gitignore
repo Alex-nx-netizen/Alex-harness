@@ -5,8 +5,12 @@ skills/*/tmp/
 # Helix runtime state
 _meta/.helix-current-run.json
 _meta/live-events.jsonl
+_meta/repo-ctx-snapshot.json
 _tmp_repo_ctx.json
 _tmp_sr_record.json
+
+# Mode-router runtime log — fixture data 可能含外部业务情境，避免泄露
+_meta/mode-router-log.jsonl
 
 # Playwright MCP runtime
 .playwright-mcp/

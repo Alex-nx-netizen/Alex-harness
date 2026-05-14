@@ -94,5 +94,7 @@
 ## 当前里程碑
 
 - **Phase -1（已完成）**: knowledge-curator skill v0.1.0 落地
-- **Phase 0（进行中）**: 蓝图骨架 → 用户回答 Q1-Q5 → v0.1 蓝图
-- **Phase 1（未开始）**: 基于 v0.1 蓝图，决定下一个 skill / agent
+- **Phase 0（已完成）**: 蓝图骨架 → v0.1 蓝图
+- **v0.7-v0.8.1（已完成）**: helix + 9 phase + Ralph 契约 + 反冗余三阶段
+- **v0.9.0（进行中）**: 真实数据承认版 —— minimal-mode 默认 / `--deep` opt-in；mode-router 中文 keyword 修复；stale auto-finalize；治理元 plugin path fallback。详见 `design/v0.9-minimal-mode.md`
+- **v0.9.x+（未开始）**: tree-sitter a2 升级 + a3 真删 + 真实任务积累 ≥10 run

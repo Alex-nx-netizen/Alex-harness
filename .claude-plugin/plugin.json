@@ -1,7 +1,7 @@
 {
   "name": "alex-harness",
-  "version": "0.8.1",
-  "description": "Personal SDLC harness — /helix is the only entrypoint, orchestrating a1-a8 + code-review + meta-audit phases under a Ralph passes contract. v0.8.1 adds anti-redundancy stack (Karpathy/Lean rules in CLAUDE.md + code-simplifier skill + monthly refactor-cycle), shared lib extraction (_meta/lib/common.cjs with nowBJ/safeAppend/stripBom/safeReadJsonl/printResult; ~120 lines deduped across 14 skills), and TTY-aware terminal output (-75~94% lines in human mode, 100% pipeline-safe). F-026 BOM defense baked into safeReadJsonl.",
+  "version": "0.9.0",
+  "description": "Personal SDLC harness — /helix is the only entrypoint. v0.9.0 承认真实使用数据（35 run 24 finalize 100% phases_run=0）：helix 默认 minimal-mode（仅 start+finalize），--deep 才进 9 phase 全链；stale current-run >30min 自动 abandoned；mode-router 中文 keyword 扩充（接口/界面/弹窗/截图/跳转 等 15 词）+ R 系列真实日志回归测试；治理元 script 加 plugin path fallback；a2 中转文件迁到 _meta/。v0.8.1 anti-redundancy stack + shared lib + TTY UX 全部继承。",
   "author": {
     "name": "Alex-nx-netizen",
     "url": "https://github.com/Alex-nx-netizen"

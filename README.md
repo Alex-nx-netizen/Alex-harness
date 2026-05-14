@@ -2,7 +2,7 @@
 
 > Alex 的私人 SDLC Agent Harness —— 基于 OpenAI Harness Engineering 三部曲 + 元思想，让 Claude 在编程协作中更可控、可观测、可自我进化。
 >
-> **当前版本：v0.8.1**（2026-5-13，反冗余三阶段 + 共享 lib 抽取 + TTY-aware UX + F-026 BOM 防御）· 工作目录：`/Users/a1234/person/ai/study/Alex-harness/`
+> **当前版本：v0.9.0**（2026-5-14，**真实数据承认版** —— 7 天 35 run/24 finalize 全 phases_run=0 → minimal-mode 默认 / `--deep` opt-in 9 phase；mode-router 中文 keyword 补全 + R 系列回归测试；stale current-run 30min 自动 abandoned；治理元 plugin path fallback；a2 中转文件迁 `_meta/`）· 工作目录：`/Users/a1234/person/ai/study/Alex-harness/`
 
 ---
 
@@ -419,8 +419,9 @@ Alex-harness/
 | **v0.7.1** | 移除 dashboard（无价值，节省 token） | ✅ 2026-5-6 |
 | **v0.7.2** | **code-review 质量元**：5 维 0-25 · soft 失败 · Step 8.5 | ✅ 2026-5-11 |
 | **v0.8.0** | **12 项一次性升级**：Ralph 完整化（失败日志 + SOUL 注入 + task_card hash）+ OTLP 导出 + grep repo-map + dogfood suite（5/5）+ score 真实化 + Anthropic frontmatter 对齐 + lonely skill 接入 + 删 a3/coarse · 29 文件 +616/-17 | ✅ 2026-5-12 |
-| **v0.8.1** 🆕 | **反冗余三阶段**：Karpathy/Lean 硬规则进 CLAUDE.md + `code-simplifier` skill（5 维 0-25，behavior_violations 计数）+ 月度 refactor-cycle · **体检 A-H**：`_meta/lib/common.cjs` 抽 nowBJ/safeAppend/stripBom/safeReadJsonl/printResult 去重 ~120 行 / findings 状态分区 / task_plan 刷新 · **UX**：TTY 检测分流，终端模式输出 −75~94%（管道行为 100% 保持）· F-026 BOM 防御 | ✅ 2026-5-13 |
-| v0.9 | 真实业务 5 次 helix dogfooding + a2 升级 tree-sitter + a3 真删 | 🔲 进行中 |
+| **v0.8.1** | **反冗余三阶段**：Karpathy/Lean 硬规则进 CLAUDE.md + `code-simplifier` skill（5 维 0-25，behavior_violations 计数）+ 月度 refactor-cycle · **体检 A-H**：`_meta/lib/common.cjs` 抽 nowBJ/safeAppend/stripBom/safeReadJsonl/printResult 去重 ~120 行 / findings 状态分区 / task_plan 刷新 · **UX**：TTY 检测分流，终端模式输出 −75~94%（管道行为 100% 保持）· F-026 BOM 防御 | ✅ 2026-5-13 |
+| **v0.9.0** 🆕 | **真实数据承认版**——以 7 天 35 run/24 finalize **100% `phases_run=0`** 为唯一锚：(1) helix 默认 **minimal-mode**（仅 `--start`+`--finalize`，`promise=COMPLETE_MINIMAL`），`--deep` 才进 9 phase 全链；(2) **stale auto-finalize**：current-run >30min 自动 abandoned，不再阻塞新 run（旧版 25.7% abort_stale 来源）；(3) **mode-router 中文 keyword** 补 15 词（接口/界面/弹窗/截图/跳转/Spring/Controller/Repository 等）+ R 系列真实日志回归测试 5 条；(4) **治理元 script** plugin path fallback（之前外部业务项目 100% script-not-found）+ evolution-tracker `--promote-soul --dry-run` 自动跑；(5) **a2 中转文件** 从 `<root>/_tmp_repo_ctx.json` 迁到 `_meta/repo-ctx-snapshot.json`，helix --finalize 兜底清理历史污染；(6) `design/v0.9-minimal-mode.md` 写明决策与验收指标 | ✅ 2026-5-14 |
+| v0.9.x+ | tree-sitter a2 升级 + a3 真删 + 真实任务积累 ≥10 run | 🔲 后续 |
 
 ---
 

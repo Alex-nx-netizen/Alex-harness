@@ -1,8 +1,9 @@
 {
-  "version": "0.7.0",
+  "version": "0.9.0",
   "thresholds": {
     "team": 3,
-    "manager_worker": 6
+    "manager_worker": 6,
+    "long_task_chars": 100
   },
   "weights": {
     "explicit_solo": -999,
@@ -57,15 +58,39 @@
       "react",
       "vue",
       "页面",
-      "组件"
+      "组件",
+      "界面",
+      "画面",
+      "首页",
+      "详情页",
+      "列表页",
+      "弹窗",
+      "表单",
+      "按钮",
+      "widget",
+      "flutter",
+      "dart",
+      "客户端",
+      "截图",
+      "跳转",
+      "导航"
     ],
     "backend": [
       "后端",
       "backend",
       "api",
+      "接口",
       "数据库",
       "database",
-      "server"
+      "server",
+      "服务端",
+      "controller",
+      "entity",
+      "repository",
+      "service",
+      "spring",
+      "回调",
+      "rest"
     ]
   },
   "model_tiers": {
