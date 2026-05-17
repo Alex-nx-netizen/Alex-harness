@@ -176,14 +176,58 @@ function cmdStart(args) {
   }
 
   const phasesPlanned = mode === "deep" ? PHASES_DEFAULT : [];
+
+  // v0.9.1：minimal mode 也自动联跑 mode-router-coarse —— 让"推荐 team 但不真派" 这个空挂从 helix 入口就堵上
+  // 数据驱动：5-14 体检发现 mode-router-log 81 条 / 36 team 推荐 / 真派 0 条
+  // 触发条件：minimal mode + taskStr 非空 + 长度 ≥ 20（短任务跳过避免噪声）
+  let teamAdvisory = null;
+  if (mode === "minimal" && taskStr.length >= 20) {
+    const routerScript = path.join(PROJECT_DIR, "skills", "mode-router", "run.cjs");
+    if (fs.existsSync(routerScript)) {
+      try {
+        const r = spawnSync("node", [routerScript, "--coarse", taskStr], {
+          encoding: "utf-8",
+          cwd: PROJECT_DIR,
+          timeout: 5000,
+        });
+        if (r.status === 0 && r.stdout) {
+          const out = JSON.parse(r.stdout);
+          teamAdvisory = {
+            router_run_id: out.router_run_id,
+            mode: out.mode,
+            team_type: out.team_type,
+            score: out.score,
+            shape: out.team_plan ? out.team_plan.shape : null,
+            reason: out.reason,
+            agent_dispatch_plan: out.agent_dispatch_plan || null,
+          };
+        }
+      } catch (e) {
+        teamAdvisory = { error: `mode-router coarse failed: ${e.message}` };
+      }
+    }
+  }
+
   const startEntry = {
     helix_run_id,
     type: "start",
     task: taskStr.slice(0, 500),
-    project_dir: PROJECT_DIR,
+    // v0.9.1：不写绝对路径（保护用户 $HOME / 内部目录结构），下游消费者也没读这字段；
+    //   保留 project_basename 仅留尾段供肉眼定位
+    project_basename: path.basename(PROJECT_DIR),
     status: "started",
     mode,
     phases_planned: phasesPlanned,
+    team_advisory: teamAdvisory
+      ? {
+          mode: teamAdvisory.mode,
+          team_type: teamAdvisory.team_type,
+          score: teamAdvisory.score,
+          shape: teamAdvisory.shape,
+          router_run_id: teamAdvisory.router_run_id,
+          dispatch_required: !!(teamAdvisory.agent_dispatch_plan && teamAdvisory.agent_dispatch_plan.must_act),
+        }
+      : null,
     ts: nowBJ(),
   };
   safeAppend(HELIX_RUNS, startEntry);
@@ -193,6 +237,7 @@ function cmdStart(args) {
     task: taskStr,
     mode,
     phase_reports: [],
+    team_advisory: teamAdvisory,
   });
 
   // v0.8 #5：SOUL.md 自动注入——helix --start 把 SOUL.md 全文塞进 plan 输出
@@ -219,6 +264,16 @@ function cmdStart(args) {
     "做完后 → node skills/helix/run.cjs --finalize，promise=COMPLETE_MINIMAL",
     "需要完整 9 phase 流程时用 --deep flag 重启",
   ];
+  // v0.9.1：注入 team_advisory 指令（如果 mode-router 推荐 team）
+  if (teamAdvisory && teamAdvisory.agent_dispatch_plan && teamAdvisory.agent_dispatch_plan.must_act) {
+    minimalInstructions.unshift(
+      `🚨 mode-router 推荐 **team / ${teamAdvisory.shape}** (score=${teamAdvisory.score}) — 见 team_advisory.agent_dispatch_plan；你必须按 spec 调 Agent tool ${teamAdvisory.agent_dispatch_plan.dispatch_count} 次；派完跑 ${teamAdvisory.agent_dispatch_plan.after_dispatch_cmd}`,
+    );
+  } else if (teamAdvisory && teamAdvisory.mode === "solo") {
+    minimalInstructions.unshift(
+      `mode-router 推荐 solo (score=${teamAdvisory.score}, reason: ${teamAdvisory.reason})`,
+    );
+  }
   const deepInstructions = [
     "**第一件事**：读上面的 soul.content（若 present=true）作为本 run 不可变行为规则",
     "你必须严格按 phases 顺序执行；每个 phase 调用对应 run.cjs（脚本会自动 --report 给 helix）",
@@ -236,6 +291,7 @@ function cmdStart(args) {
       note: soulNote,
       content: soulContent,
     },
+    team_advisory: teamAdvisory,
     instructions: mode === "minimal" ? minimalInstructions : deepInstructions,
     phases:
       mode === "minimal"

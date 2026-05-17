@@ -5,7 +5,7 @@
     "task": "在 _meta/progress.md 顶部追加一条今日产出条目，记录 worker_a 完成 v0.7 升级 A1+A2+A3+B4+E1+E4 + UI 优化",
     "task_label": "/helix",
     "user_intent": "log_today_progress",
-    "project_dir": "/Users/a1234/person/ai/study/Alex-harness"
+    "project_dir": "<PROJECT_ROOT>"
   },
   "expected_phases": [
     {

@@ -1,7 +1,7 @@
 ---
 name: mode-router
-version: 0.3.0
-description: 根据任务描述检测并行/审查信号，推荐 solo 或 team 路由并等用户确认；v0.3 加 Manager-Worker 二层 + per-phase model tier + config 外置；记录决策到 _meta/mode-router-log.jsonl
+version: 0.9.1
+description: 根据任务描述检测并行/审查信号，推荐 solo 或 team 路由并等用户确认；v0.9.1 加 AGENT_DISPATCH 闭环硬契约（推荐 team 即 LLM 必须按 agent_specs 调 Agent tool）+ --record-dispatch / --feedback 闭环；记录决策到 _meta/mode-router-log.jsonl
 trigger: manual
 can_run: true
 evolution_target: runs.jsonl + _meta/mode-router-log.jsonl
@@ -33,9 +33,12 @@ tools_required: ["Bash"]
 用户描述任务时，在任务开头显式调用或自动调用：
 
 ```bash
-node .claude/skills/mode-router/run.cjs "实现用户登录页面 + 后端 API，同时做"
-node .claude/skills/mode-router/run.cjs --list     # 查看最近路由记录
-node .claude/skills/mode-router/run.cjs --log "task" solo true   # 手动记录
+node skills/mode-router/run.cjs --coarse "实现用户登录页面 + 后端 API，同时做"
+node skills/mode-router/run.cjs --fine '{"task":"...","files_changed_count":N,"steps_count":N}'
+node skills/mode-router/run.cjs --list                        # 查看最近路由记录
+node skills/mode-router/run.cjs --log "task" solo true        # 手动记录
+node skills/mode-router/run.cjs --record-dispatch '<run_id>' '<id1,id2,...>'   # v0.9.1：派完 Agent 后回填
+node skills/mode-router/run.cjs --feedback '<run_id>' --rating=0|1 --override=solo|team --notes='...'
 ```
 
 **典型使用时机**：
@@ -195,6 +198,30 @@ node skills/mode-router/tests/run-tests.cjs
 
 覆盖 6 case：T1 manager_worker（score≥6）/ T2 subagent_parallel（3≤score<6）/ T3 peer_review（review 词）/ T4 solo（score<3）/ T5 显式 solo 覆盖 / T6 阈值。当前 26 项断言 100% 通过。
 
+## §13 v0.9.1 AGENT_DISPATCH 闭环硬契约（解决"推荐空挂"）
+
+**问题**：截至 2026-5-14 mode-router-log 81 条 / 36 team 推荐 / 0 真实派 Agent。helix-runs.jsonl 27 finalize 里 mode=team **0 条**。推荐和执行之间断裂。
+
+**v0.9.1 契约**：
+
+1. **mode-router 输出新增 `agent_dispatch_plan` 字段**（mode=team 时必产）：
+   - `blocking: true / must_act: true`
+   - `directive` —— 给 LLM 看的强契约句
+   - `agent_specs[]` —— 每个 subagent 的 `{description, subagent_type, model, full_prompt}` 可直接套 Agent tool
+   - `after_dispatch_cmd` —— LLM 派完必须跑的回填命令
+2. **LLM（Claude）契约**（CLAUDE.md "反 mode-router 空挂" 段引用）：
+   - 看到 `mode=team` + `agent_dispatch_plan.must_act=true` → 必须在**本回合**调 Agent tool（数量 = `dispatch_count`，shape 决定串/并/二层）
+   - 派完后 → 必须跑 `--record-dispatch <run_id> <ids,...>` 把真 ID 写回 log
+   - 如果不同意推荐 → 必须先跑 `--feedback <run_id> --override=solo --notes='<原因>'`，再 solo
+   - 跳过任意一步 = mode-router 这次推荐永远学不到（evolution-tracker 拿不到执行证据）
+3. **evolution-tracker 监督信号**（待 v0.9.2 接入）：
+   - `dispatched_subagent_ids != null` = 真闭环；`null` = 空挂
+   - 连续 3 次 mode=team 但 dispatched=null → 触发 P-NN 议案"contract 失效，需加 helix-side 强校验"
+
+**配套子命令**：
+- `--record-dispatch '<run_id>' <id1,id2,...>`：派完回填，ID 必须 ≥4 字符
+- `--feedback '<run_id>' --rating=0|1 --override=solo|team --notes='...'`：用户验收信号
+
 ## 修订历史
 
 | 版本 | 时间 | 变更 |
@@ -202,3 +229,4 @@ node skills/mode-router/tests/run-tests.cjs
 | 0.1.0 | 2026-5-1 | 初版；Q1-Q5 锁定；4 phase；验收清单 8 项 |
 | 0.2.0 | 2026-5-3 | 双阶段路由（--coarse/--fine）+ 100% 精确硬契约（5.7 闭环）+ team_plan.agents[] |
 | 0.3.0 | 2026-5-4 | Manager-Worker 二层（论文 §6①）+ per-phase model tier（论文 §6⑧）+ 评分外置 config.json（E3）+ 单元测试 26 断言 |
+| 0.9.1 | 2026-5-17 | **AGENT_DISPATCH 闭环硬契约**：mode=team 推荐时输出 `agent_dispatch_plan`，LLM 必须按 spec 调 Agent tool；`--record-dispatch` / `--feedback` 子命令；coarse 路径取消 deprecated（v0.9 minimal mode 主路径） |

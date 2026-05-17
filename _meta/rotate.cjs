@@ -5,6 +5,7 @@
 //   node _meta/rotate.cjs              # 默认归档"上一个月"
 //   node _meta/rotate.cjs --month 2026-04
 //   node _meta/rotate.cjs --month 2026-4   # 也接受不带前导 0 的（CLAUDE.md 时间格式）
+//   node _meta/rotate.cjs --before 2026-5-14  # v0.9.1：按日期阈值归档（用 archive/helix-runs-before-<date>.jsonl）
 //
 // 行为：
 //   1. 读 _meta/helix-runs.jsonl 全文
@@ -29,14 +30,32 @@ const SRC = path.join(META_DIR, "helix-runs.jsonl");
 const ARCHIVE_DIR = path.join(META_DIR, "archive");
 
 function parseArgs(argv) {
-  const args = { month: null };
+  const args = { month: null, before: null };
   for (let i = 2; i < argv.length; i++) {
     if (argv[i] === "--month" && argv[i + 1]) {
       args.month = argv[i + 1];
       i++;
+    } else if (argv[i] === "--before" && argv[i + 1]) {
+      args.before = argv[i + 1];
+      i++;
     }
   }
   return args;
+}
+
+// v0.9.1：把 ts 字符串 "YYYY-M-D HH:MM:SS" → 比较用的可排序字符串 "YYYY-MM-DD HH:MM:SS"
+function tsSortKey(ts) {
+  if (!ts) return "";
+  const m = String(ts).match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:\s+(\d{1,2}):(\d{1,2}):(\d{1,2}))?/);
+  if (!m) return "";
+  const pad = (s) => String(s).padStart(2, "0");
+  return `${m[1]}-${pad(m[2])}-${pad(m[3])} ${pad(m[4] || 0)}:${pad(m[5] || 0)}:${pad(m[6] || 0)}`;
+}
+
+function tsBefore(ts, beforeDate) {
+  const a = tsSortKey(ts);
+  const b = tsSortKey(beforeDate + " 00:00:00");
+  return a && a < b;
 }
 
 // "2026-4" / "2026-04" → "2026-4"（与 ts 字段格式 YYYY-M-D 对齐，CLAUDE.md 工作约定 #7）
@@ -120,14 +139,29 @@ function validateJsonl(file) {
 
 function main() {
   const args = parseArgs(process.argv);
-  const targetMonth = normalizeMonth(args.month) || defaultLastMonth();
-
   if (!fs.existsSync(SRC)) {
     console.error(`[rotate] 源文件不存在: ${SRC}`);
     process.exit(1);
   }
 
-  console.log(`[rotate] target month = ${targetMonth}`);
+  // v0.9.1：--before 优先（按日期阈值），否则回到 --month 月度行为
+  const useBefore = !!args.before;
+  let targetMonth = null;
+  let beforeDate = null;
+  let archiveSlug = null;
+  if (useBefore) {
+    if (!/^\d{4}-\d{1,2}-\d{1,2}$/.test(args.before)) {
+      console.error(`[rotate] --before 格式错误：${args.before}（应为 YYYY-M-D）`);
+      process.exit(1);
+    }
+    beforeDate = args.before;
+    archiveSlug = `before-${beforeDate}`;
+    console.log(`[rotate] mode = before  threshold = ${beforeDate} 00:00:00`);
+  } else {
+    targetMonth = normalizeMonth(args.month) || defaultLastMonth();
+    archiveSlug = targetMonth;
+    console.log(`[rotate] mode = month  target = ${targetMonth}`);
+  }
   console.log(`[rotate] source = ${SRC}`);
 
   const { parsed } = readJsonlLines(SRC);
@@ -136,7 +170,9 @@ function main() {
   const matched = [];
   const remaining = [];
   for (const p of parsed) {
-    if (tsInMonth(p.obj.ts, targetMonth)) matched.push(p);
+    const ts = p.obj.ts || p.obj.started_at || p.obj.finished_at;
+    const hit = useBefore ? tsBefore(ts, beforeDate) : tsInMonth(ts, targetMonth);
+    if (hit) matched.push(p);
     else remaining.push(p);
   }
 
@@ -151,7 +187,7 @@ function main() {
 
   // 1) 写归档文件（追加模式，避免覆盖之前的归档）
   ensureDir(ARCHIVE_DIR);
-  const archivePath = path.join(ARCHIVE_DIR, `helix-runs-${targetMonth}.jsonl`);
+  const archivePath = path.join(ARCHIVE_DIR, `helix-runs-${archiveSlug}.jsonl`);
 
   // 简单去重：若归档已存在，把已存在的 helix_run_id+type+ts 去掉再追加
   let existing = new Set();

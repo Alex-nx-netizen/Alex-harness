@@ -37,3 +37,10 @@ _meta/archive/
 
 # v0.8 dogfood suite report (regenerated each run)
 _meta/dogfood/last-suite-report.json
+
+# v0.9.1：rotate / migrate 安全备份不进 git（本机临时文件）
+*.bak
+*.bak-*
+
+# v0.9.1：Claude Code 本机权限配置含本机路径，不进 git
+.claude/settings.local.json

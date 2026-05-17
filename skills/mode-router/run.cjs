@@ -252,6 +252,75 @@ function buildTeamPlan(taskDesc, planSignals, s) {
   };
 }
 
+// v0.9.1：把 team_plan.agents 抽成 LLM-targeted "AGENT_DISPATCH" 块——直接告诉 Claude 该怎么调 Agent tool
+// 这是 mode-router → 真 team 执行闭环的核心：让推荐 → 调度 之间不再是空气
+function buildAgentDispatchPlan(r, runId) {
+  if (r.mode !== "team" || !r.team_plan) return null;
+  const shape = r.team_plan.shape;
+  const agents = r.team_plan.agents || [];
+
+  // 展平 manager_worker 的 subordinates 一起算 dispatch 总数
+  let dispatchCount = agents.length;
+  if (shape === "manager_worker") {
+    const mgr = agents[0];
+    const subs = (mgr && mgr.subordinates) || [];
+    dispatchCount = 1 + subs.length;
+  }
+
+  const directive =
+    shape === "peer_review"
+      ? `你（Claude）必须**串行**调 Agent tool 2 次：先 implementer → 等其完成 → 再 reviewer（独立看 diff）`
+      : shape === "manager_worker"
+        ? `你（Claude）必须**先**调 Agent tool 1 次（manager），让它内部协调；不要直接派 worker——manager 会拆分后再调 ${dispatchCount - 1} 个 worker`
+        : `你（Claude）必须**并行**调 Agent tool ${dispatchCount} 次（一条消息里多个 Agent 调用块）`;
+
+  const agentSpecs = agents.map((a) => ({
+    description: a.description || a.role || "subagent",
+    subagent_type: a.subagent_type || "general-purpose",
+    model: a.model || "sonnet",
+    prompt_summary: (a.prompt || "").slice(0, 240) + (a.prompt && a.prompt.length > 240 ? "..." : ""),
+    full_prompt: a.prompt || "",
+    ...(a.subordinates ? { subordinates: a.subordinates.length } : {}),
+  }));
+
+  return {
+    blocking: true,
+    must_act: true,
+    rule_source: "mode-router v0.9.1 闭环硬契约 — 见 CLAUDE.md '反 mode-router 空挂' 段",
+    shape,
+    fan_out: r.team_plan.fan_out || agents.length,
+    dispatch_count: dispatchCount,
+    directive,
+    dispatch_steps:
+      shape === "peer_review"
+        ? [
+            "1. 调 Agent tool（subagent_type=general-purpose）— implementer，按 agent_specs[0].full_prompt 派",
+            "2. 等 implementer 返回后，调 Agent tool — reviewer（subagent_type=ecc:code-reviewer or general-purpose），按 agent_specs[1].full_prompt 派",
+            "3. 跑 node skills/mode-router/run.cjs --record-dispatch '" + runId + "' <impl_id>,<rev_id>",
+          ]
+        : shape === "manager_worker"
+          ? [
+              "1. 调 1 次 Agent tool（manager，subagent_type=general-purpose, model=opus），按 agent_specs[0].full_prompt + agent_specs[0].subordinates 数派",
+              "2. manager 内部会再调 N 个 worker——你不需要自己派",
+              "3. 收到 manager 摘要后，跑 node skills/mode-router/run.cjs --record-dispatch '" + runId + "' <manager_id>,<worker1_id>,...",
+            ]
+          : [
+              `1. 在**一条消息**里调 ${dispatchCount} 个 Agent tool 块（并行），分别按 agent_specs[i].full_prompt 派`,
+              `2. 每个 Agent 的 subagent_type / model 见 agent_specs[i]`,
+              "3. 收到所有 worker 返回后，跑 node skills/mode-router/run.cjs --record-dispatch '" + runId + "' <id1>,<id2>,...",
+            ],
+    agent_specs: agentSpecs,
+    forbid: [
+      "禁止直接 solo 干活（mode=team 推荐时这样做 = 推荐空挂，违反 v0.9.1 闭环契约）",
+      "禁止填假 ID 来 --record-dispatch（每个 ID 必须 ≥4 字符，来自 Agent tool 实际返回）",
+      "禁止跳过 --record-dispatch（不写 ID = evolution-tracker 拿不到执行证据 = mode-router 永远学不会）",
+    ],
+    after_dispatch_cmd: `node skills/mode-router/run.cjs --record-dispatch '${runId}' <id1,id2,...>`,
+    if_you_disagree:
+      "若你判断推荐错了，跑 node skills/mode-router/run.cjs --feedback '" + runId + "' --override=solo --notes='<原因>'，然后再 solo 执行",
+  };
+}
+
 function buildEnforcement(r) {
   if (r.mode === "solo") {
     return {
@@ -349,6 +418,18 @@ function printRecommendation(taskDesc, r, stage) {
     lines.push(`│ 形式：${TEAM_FORMS[shape]}`);
   }
   lines.push("└────────────────────────────────────────────┘");
+
+  // v0.9.1：mode=team 时打 loud banner，提醒 Claude 必须按 agent_dispatch_plan 调 Agent tool
+  if (r.mode === "team" && r.agent_dispatch_plan) {
+    const adp = r.agent_dispatch_plan;
+    lines.push("");
+    lines.push("⚠️  === AGENT_DISPATCH_REQUIRED (Claude 必读) ===");
+    lines.push(`   shape: ${adp.shape} | dispatch_count: ${adp.dispatch_count}`);
+    lines.push(`   directive: ${adp.directive}`);
+    lines.push("   详细 spec 见 stdout JSON 的 agent_dispatch_plan 字段");
+    lines.push(`   完成后必须跑：${adp.after_dispatch_cmd}`);
+    lines.push("================================================");
+  }
   console.error(lines.join("\n"));
 }
 
@@ -398,17 +479,21 @@ function cmdCoarse(taskDesc) {
     return;
   }
   const s = score(taskDesc, null);
+  const routerRunId = nowBJ();
   const r = {
     ...s,
     reason: reasonFor(s),
     stage: "coarse",
     enforcement: buildEnforcement(s),
-    note: "粗判仅给 a4 提前打 buff，最终决策以 Step 5.7 细判为准（不可绕过）",
-    deprecated: "v0.8 #6/#12: 数据显示 99% 自检，主链默认已移除；保留入口向后兼容",
+    // v0.9.1：coarse 也算 team_plan，用于 minimal-mode helix 直接闭环（无 plan 信号也能派 subagent）
+    team_plan: buildTeamPlan(taskDesc, null, s),
+    router_run_id: routerRunId,
+    note: "v0.9.1：coarse 路径重新激活——minimal-mode helix 自动调用 + 直接产 agent_dispatch_plan",
   };
+  r.agent_dispatch_plan = buildAgentDispatchPlan(r, routerRunId);
   printRecommendation(taskDesc, r, "coarse");
   safeAppend(ROUTER_LOG, {
-    run_id: nowBJ(),
+    run_id: routerRunId,
     stage: "coarse",
     task_desc: taskDesc.slice(0, 200),
     mode: r.mode,
@@ -417,14 +502,19 @@ function cmdCoarse(taskDesc) {
     breakdown: r.breakdown,
     reason: r.reason,
     timestamp_ms: Date.now(),
+    shape: r.team_plan ? r.team_plan.shape : null,
+    agent_dispatch_required: r.agent_dispatch_plan ? true : false,
+    dispatched_subagent_ids: null,
+    user_override: null,
   });
   safeAppend(RUNS_LOG, {
-    run_id: nowBJ(),
+    run_id: routerRunId,
     skill: "mode-router",
     stage: "coarse",
     mode: r.mode,
     team_type: r.team_type,
     score: r.score,
+    shape: r.team_plan ? r.team_plan.shape : null,
     task_snippet: taskDesc.slice(0, 80),
     user_feedback: { rating: null, fix_notes: null },
   });
@@ -446,6 +536,7 @@ function cmdFine(jsonStr) {
     steps_count: Number(input.steps_count || 0),
   };
   const s = score(taskDesc, planSignals);
+  const routerRunId = nowBJ();
   const r = {
     ...s,
     reason: reasonFor(s),
@@ -453,6 +544,7 @@ function cmdFine(jsonStr) {
     plan_signals: planSignals,
     enforcement: buildEnforcement(s),
     team_plan: buildTeamPlan(taskDesc, planSignals, s),
+    router_run_id: routerRunId,
     contract: {
       enforcement_level: "MUST",
       a5_passes_requires:
@@ -464,9 +556,10 @@ function cmdFine(jsonStr) {
         "a5 不满足契约 → passes=false → finalize promise=NOT_COMPLETE",
     },
   };
+  r.agent_dispatch_plan = buildAgentDispatchPlan(r, routerRunId);
   printRecommendation(taskDesc || "(plan based)", r, "fine");
   safeAppend(ROUTER_LOG, {
-    run_id: nowBJ(),
+    run_id: routerRunId,
     stage: "fine",
     task_desc: taskDesc.slice(0, 200),
     plan_signals: planSignals,
@@ -477,9 +570,12 @@ function cmdFine(jsonStr) {
     breakdown: r.breakdown,
     reason: r.reason,
     timestamp_ms: Date.now(),
+    agent_dispatch_required: r.agent_dispatch_plan ? true : false,
+    dispatched_subagent_ids: null,
+    user_override: null,
   });
   safeAppend(RUNS_LOG, {
-    run_id: nowBJ(),
+    run_id: routerRunId,
     skill: "mode-router",
     stage: "fine",
     mode: r.mode,
@@ -564,6 +660,121 @@ function cmdLogManual(args) {
   );
 }
 
+// v0.9.1：闭环命令——LLM 在按 agent_dispatch_plan 派完 subagent 后必须回填 IDs
+// 写入 ROUTER_LOG 对应 run_id 的 entry.dispatched_subagent_ids
+// evolution-tracker 后续按 "dispatched_subagent_ids != null" 来判断推荐是否真被执行
+function patchRouterLogEntry(runId, patch) {
+  if (!fs.existsSync(ROUTER_LOG)) {
+    return { ok: false, reason: "ROUTER_LOG missing" };
+  }
+  const lines = fs.readFileSync(ROUTER_LOG, "utf-8").split("\n");
+  let found = false;
+  const out = [];
+  for (const raw of lines) {
+    if (!raw.trim()) {
+      out.push(raw);
+      continue;
+    }
+    let obj;
+    try {
+      obj = JSON.parse(raw);
+    } catch {
+      out.push(raw);
+      continue;
+    }
+    if (obj.run_id === runId) {
+      Object.assign(obj, patch);
+      found = true;
+      out.push(JSON.stringify(obj));
+    } else {
+      out.push(raw);
+    }
+  }
+  if (!found) return { ok: false, reason: `run_id=${runId} not found in ROUTER_LOG` };
+  fs.writeFileSync(ROUTER_LOG, out.join("\n"), "utf-8");
+  // 写后立即逐行校验（CLAUDE.md 铁律 #8）
+  for (const ln of out.filter(Boolean)) {
+    try {
+      JSON.parse(ln);
+    } catch (e) {
+      return { ok: false, reason: `JSON.parse fail after write: ${e.message}` };
+    }
+  }
+  return { ok: true };
+}
+
+function cmdRecordDispatch(args) {
+  const runId = args[0];
+  if (!runId) {
+    console.error('Usage: --record-dispatch <run_id> <id1,id2,...>');
+    process.exit(2);
+  }
+  // 兼容 --ids=a,b 或裸位置参数 a,b
+  let idsRaw = "";
+  for (const a of args.slice(1)) {
+    if (a.startsWith("--ids=")) idsRaw = a.slice(6);
+    else if (!a.startsWith("--")) idsRaw = a;
+  }
+  const ids = idsRaw.split(/[,\s]+/).filter(Boolean);
+  if (ids.length === 0) {
+    console.error("[mode-router] --record-dispatch 需要至少 1 个 subagent ID");
+    process.exit(2);
+  }
+  const invalid = ids.filter((x) => x.length < 4);
+  if (invalid.length > 0) {
+    console.error(`[mode-router] 这些 ID < 4 字符（违反契约，看起来像假 ID）: ${invalid.join(", ")}`);
+    process.exit(2);
+  }
+  const r = patchRouterLogEntry(runId, {
+    dispatched_subagent_ids: ids,
+    dispatched_at: nowBJ(),
+  });
+  if (!r.ok) {
+    console.error(`[mode-router] --record-dispatch 失败：${r.reason}`);
+    process.exit(2);
+  }
+  console.log(JSON.stringify({ ok: true, run_id: runId, ids_count: ids.length, ids }, null, 2));
+}
+
+function cmdFeedback(args) {
+  const runId = args[0];
+  if (!runId) {
+    console.error("Usage: --feedback <run_id> [--rating=0|1] [--override=solo|team|none] [--notes=...]");
+    process.exit(2);
+  }
+  const patch = {};
+  for (const a of args.slice(1)) {
+    if (a.startsWith("--rating=")) {
+      const v = Number(a.slice(9));
+      if (![0, 1].includes(v)) {
+        console.error("[mode-router] --rating 必须 0 或 1（命中/没命中）");
+        process.exit(2);
+      }
+      patch.user_rating = v;
+    } else if (a.startsWith("--override=")) {
+      const v = a.slice(11);
+      if (!["solo", "team", "none"].includes(v)) {
+        console.error("[mode-router] --override 只接受 solo / team / none");
+        process.exit(2);
+      }
+      patch.user_override = v === "none" ? null : v;
+    } else if (a.startsWith("--notes=")) {
+      patch.user_notes = a.slice(8).slice(0, 300);
+    }
+  }
+  if (Object.keys(patch).length === 0) {
+    console.error("[mode-router] 至少传一个：--rating / --override / --notes");
+    process.exit(2);
+  }
+  patch.feedback_at = nowBJ();
+  const r = patchRouterLogEntry(runId, patch);
+  if (!r.ok) {
+    console.error(`[mode-router] --feedback 失败：${r.reason}`);
+    process.exit(2);
+  }
+  console.log(JSON.stringify({ ok: true, run_id: runId, patched: patch }, null, 2));
+}
+
 function usage() {
   console.error("Usage:");
   console.error(
@@ -574,6 +785,8 @@ function usage() {
   );
   console.error("  node skills/mode-router/run.cjs --list");
   console.error('  node skills/mode-router/run.cjs --log "task" solo true');
+  console.error("  node skills/mode-router/run.cjs --record-dispatch <run_id> <id1,id2,...>");
+  console.error("  node skills/mode-router/run.cjs --feedback <run_id> [--rating=0|1] [--override=solo|team] [--notes=...]");
 }
 
 function main() {
@@ -587,6 +800,10 @@ function main() {
     showList();
   } else if (sub === "--log") {
     cmdLogManual(args.slice(1));
+  } else if (sub === "--record-dispatch") {
+    cmdRecordDispatch(args.slice(1));
+  } else if (sub === "--feedback") {
+    cmdFeedback(args.slice(1));
   } else if (sub && !sub.startsWith("--")) {
     // 兼容 v0.1：直接传 task → 等价 --coarse
     cmdCoarse(args.join(" "));

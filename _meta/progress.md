@@ -4,6 +4,35 @@
 
 ---
 
+## 2026-5-17
+
+### 会话 34：v0.9.1 mode-router 推荐 → Agent 派发 闭环（解决"推荐空挂"）
+
+- 🧠 **触发**：Alex 看 /usage 后问"team 模式为什么没看到准确的执行" → 数据分析揭穿：mode-router-log 81 条 / 36 team 推荐 / `user_override`=0；helix-runs.jsonl 27 finalize 里 mode=team 的 finalize **0 条** → 推荐和真派 Agent 之间是空气
+- 📊 **根因三段断裂**：(1) v0.9 minimal mode 默认不调 mode-router；(2) 即使调了，agents[] 只是日志，没机制喂回 Claude；(3) helix 不分 team/solo execution，finalize 里看不到 mode=team
+- 🛠 **6 项一起落地**：
+  - **#1 闭环**：mode-router/run.cjs 加 `buildAgentDispatchPlan(r, runId)` —— mode=team 时输出 `agent_dispatch_plan` 字段（blocking/must_act/directive/agent_specs/forbid/after_dispatch_cmd/if_you_disagree），LLM 必须按 spec 派 Agent tool；新增 `--record-dispatch '<run_id>' <ids>` 回填子命令（ID ≥4 字符校验）；CLAUDE.md 加"反 mode-router 空挂硬规则"段（何时跑 / 看到 team 怎么做 / 禁止 / 例外）；SKILL.md §13 新增 v0.9.1 契约 + 版本 0.3.0 → 0.9.1
+  - **#2 schema 迁移**：`_meta/migrate_helix_runs_mode.cjs` 新建（dry-run + --apply + .bak 备份 + 逐行 JSON.parse 校验）；24 条 mode=undefined 的 legacy finalize 标 `mode=legacy_pre_v0.9` + `_migrated_from`；byMode 从 `{?: 24, deep: 1, minimal: 2}` 变成 `{legacy_pre_v0.9: 24, deep: 1, minimal: 3}` 干净
+  - **#3 minimal mode 自动联跑 mode-router**：helix/run.cjs `cmdStart` 加 5s timeout spawnSync 调 mode-router --coarse（task ≥ 20 字才触发），结果存进 `team_advisory` 字段；同时写进 helix state + start entry + plan output；instructions 首条 unshift "🚨 mode-router 推荐 team / ..."
+  - **#4 feedback CLI**：`--feedback '<run_id>' --rating=0|1 --override=solo|team --notes='...'` 子命令；解决 81 条 user_feedback 全空根因
+  - **#5 task_plan.md 刷新**：当前阶段 v0.8.1 → **v0.9.1**；8.1.A-H 全标 ✅ 完成；新加 9.1.1-9.1.10 子任务表
+  - **#6 rotate `--before` 模式**：`_meta/rotate.cjs` 加 `--before YYYY-M-D` 阈值（按日期阈值归档，原 `--month` 不动）；helix-runs.jsonl 115KB → 10KB，291 条进 `archive/helix-runs-before-2026-5-14.jsonl`（104KB）；rotate_check 重新 OK
+- ✅ **端到端闭环验证**：
+  - 35/35 mode-router 单元测试通过（无 regression）
+  - `helix --start "前端 + 后端 同时做：..."` → team_advisory.router_run_id 自动产 / shape=manager_worker / dispatch_count=3
+  - `--record-dispatch` 写入 3 个 demo ID + `--feedback --rating=1` 写入；末条 router-log 验证 `dispatched_subagent_ids` / `user_rating` / `user_notes` 全填
+  - helix finalize 写 mode=minimal + promise=COMPLETE_MINIMAL
+- 📌 **教训 / 设计决定**：
+  - **推荐型 skill 必须有"喂回"机制**：写日志 + 打印推荐框只完成 50%——LLM 看不到 / 看见也忽略 = 路由器永远是装饰。这次的 `agent_dispatch_plan.must_act` + helix instructions unshift + CLAUDE.md 硬规则 是"三层强契约"
+  - **coarse 路径取消 deprecated**：原 deprecated 是"99% 自检无 plan 信号"——但 minimal mode 没有 plan 阶段，coarse 反而是唯一可调路径。设计意图随主链改变要勇于翻案
+  - **run_id 含空格的痛点**：nowBJ() = `YYYY-M-D HH:MM:SS` 在 shell 命令里必须用单引号包；`after_dispatch_cmd` 模板用 `'${runId}'` 防止 LLM 复制后被空格拆参
+  - **JSON 解析 SOUL.md 控制字符**：管道传 helix start 输出时 node -e 卡在 SOUL.md content 的换行 → 改写文件再读绕过；提醒：未来 plan output 应避免内联多行 markdown，或上层 reader 用 python3 json（更宽容）
+- 📦 **变更文件清单**：
+  - 修改：`skills/mode-router/run.cjs` / `skills/mode-router/SKILL.md` / `skills/helix/run.cjs` / `_meta/rotate.cjs` / `_meta/task_plan.md` / `CLAUDE.md` / `_meta/helix-runs.jsonl`（迁移）
+  - 新增：`_meta/migrate_helix_runs_mode.cjs` / `_meta/archive/helix-runs-before-2026-5-14.jsonl` / `_meta/helix-runs.jsonl.bak` / `_meta/helix-runs.jsonl.bak-<ts>`（备份链）
+
+---
+
 ## 2026-5-13
 
 ### 会话 33：执行速度 + 用户观感优化（行为安全）
@@ -156,17 +185,17 @@
   - 修复：`~/.claude/settings.json` 顶层加 `env: {"ECC_GATEGUARD": "off"}`；同时删掉误放在 `permissions` 里的 Win-only `CLAUDE_CODE_USE_POWERSHELL_TOOL: "1"`
   - 验证：`rm -rf` 等会触发 `DESTRUCTIVE_BASH` 正则的命令、新文件 Write 全部直接放行，hook 进 `isGateGuardDisabled()` 提前 return
 - 🛠 **跨平台改动**（仅活跃文件，不动历史日志）：
-  - `_meta/e2e-fixtures/01-simple-task.json` `project_dir`：`E:\\ai\\study\\person\\Alex-harness` → `/Users/a1234/person/ai/study/Alex-harness`
+  - `_meta/e2e-fixtures/01-simple-task.json` `project_dir`：`E:\\ai\\study\\person\\Alex-harness` → `<PROJECT_ROOT>`
   - `skills/session-reporter/SKILL.md` Stop hook 示例：写死 `node "E:\..."` → `node "$CLAUDE_PROJECT_DIR/.claude/skills/session-reporter/run.cjs"`（跨 Win/Mac/Linux 通用）
   - **补充（cleanup worker，2026-5-8）**：
-    - `CLAUDE.md` 第 6 行"工作目录"`E:\ai\study\person\Alex-harness\` → `/Users/a1234/person/ai/study/Alex-harness/`，并标注"2026-5-8 Win → mac 迁，4-28 在 Win 下从 …\harness\ 重命名"作为历史
+    - `CLAUDE.md` 第 6 行"工作目录"`<PROJECT_ROOT_WIN_LEGACY>\` → `<PROJECT_ROOT>/`，并标注"2026-5-8 Win → mac 迁，4-28 在 Win 下从 …\harness\ 重命名"作为历史
     - `CLAUDE.md` §"目录变迁备忘"段：第一行"当前工作目录"改为 mac 路径；memory 链追加 `~/.claude/projects/-Users-a1234-person-ai-study-Alex-harness/memory/` 作为当前项；末尾加 "2026-5-8 迁 mac" 一行说明（历史 Win 链作为事实保留，未删）
     - `CLAUDE.md` §8 铁律"Windows 路径里的 `\` 在 JSON 字符串中必须转义"段未动（按 prompt 要求保留为教训记录）
     - 删除 `_meta/feishu-pr-auto-config.md`（整篇 PowerShell + schtasks + 引用 v0.7.1 已删的 `dashboard\server.js`，双重过时）
     - 全项目 grep 兜底（活跃文件，排除 _meta 历史日志 / design / .git / node_modules）：`E:\\` / `powershell` / `schtasks` / `.bat` / `.ps1` / `cmd.exe` / `CLAUDE_CODE_USE_POWERSHELL` / `path.win32` 全部 0 命中，干净
-  - 🔲 **未碰，留 Alex 决定**：`.claude/settings.local.json` 的 `permissions.allow` 内还有 4 条 Win 路径（`C:/Users/Administrator/...` 和 `E:/ai/study/...`）；属用户主权 + 上次 self-modification 被安全闸阻断有先例，没自动改
+  - 🔲 **未碰，留 Alex 决定**：`.claude/settings.local.json` 的 `permissions.allow` 内还有 4 条 Win 路径（`<WIN_USER_HOME>/...` 和 `<PARENT_DIR>/...`）；属用户主权 + 上次 self-modification 被安全闸阻断有先例，没自动改
 - 🔲 **遗留待 Alex 拍板**：
-  - `CLAUDE.md` §目录变迁备忘 + 第 6 行/第 10 行的"工作目录"还写 `E:\ai\study\person\Alex-harness\`（用户主权区）
+  - `CLAUDE.md` §目录变迁备忘 + 第 6 行/第 10 行的"工作目录"还写 `<PROJECT_ROOT_WIN_LEGACY>\`（用户主权区）
   - `_meta/feishu-pr-auto-config.md` 整篇 PowerShell + `schtasks` + 引用已在 v0.7.1 删除的 `dashboard\server.js`，双重过时——建议直接删
 - 🔐 **顺手处理**：Alex 在对话开头贴出真实 GitHub PAT（`ghp_mu2W...`）→ 立即提醒并已吊销 → 改用 `gh auth login` 设备码流程，账号 `Alex-nx-netizen`，token 进 macOS keyring
 - 📌 **教训**：跨平台 hook 配置示例不能写绝对路径；Claude Code 的 settings.json `env` 块对运行中会话的 Bash 子进程**也立刻生效**（无需重启），但在 hook 自身缓存的状态/路径相关变量仍按启动时计算
@@ -371,7 +400,7 @@
   - 新增 §2.5 段：3 步 skill 发现链（本地扫 14 项 → system-reminder available skills → find-skills MCP）
   - 命中规则：强匹配 skill 写入 task_card.preferred_skills；零命中要在 progress 留笔（沉淀"已有库不覆盖此类任务"信号）
   - §6 Ralph 接受清单 + 1 条："skill 最优复用"
-  - 同步到 `C:/Users/Administrator/.claude/plugins/cache/alex-harness/alex-harness/0.3.1/skills/helix/SKILL.md`（Alex 调 /helix 走的实际路径）
+  - 同步到 `<CLAUDE_PLUGIN_CACHE>/skills/helix/SKILL.md`（Alex 调 /helix 走的实际路径）
 - 🐛 **F-024 物质化**：findings.md 新增——"helix 流程缺 skill 最优复用门槛，每次从零写，复用率为 0"，沉淀这次 retro
 - ⏭ **下次 /helix 验证**：跑下个任务时观察是否真的 a3 → 5.5 → a4，是否 preferred_skills 出现在 plan 里
 - 📊 **agent-teams-playbook 决策树定位**：本次任务复杂度=简单（改 SKILL.md + 沉淀），场景=场景 1（提示增强，单 agent），不组团
@@ -838,7 +867,7 @@
 - 🎯 **下一步**：等用户答 §8 Q1-Q6（推荐答案已写在每个 Q 下面，可直接 +/- 勾选）
 
 ### 会话 8：新会话启动 + memory 二次迁移（harness/ → Alex-harness/）
-- 📂 **目录又改名了**：`E:\ai\study\person\harness\` → `E:\ai\study\person\Alex-harness\`（用户在会话 7 → 8 之间手动改）
+- 📂 **目录又改名了**：`<PROJECT_ROOT_WIN_LEGACY_OLDNAME>\` → `<PROJECT_ROOT_WIN_LEGACY>\`（用户在会话 7 → 8 之间手动改）
 - ✅ **memory cp**：`~/.claude/projects/E--ai-study-person-harness/memory/` → `~/.claude/projects/E--ai-study-person-Alex-harness/memory/`（6 个文件全部到位）
 - ✅ **CLAUDE.md 备忘节更新**：记录三段 memory 路径变迁链 + "重命名工作目录都要 cp memory" 教训
 - ✅ **runs.jsonl 健康检查**：3 条都 parse 成功（L1 旧记录 feedback=null，L2 wiki run feedback=5，L3 meta-kim aborted）
@@ -847,9 +876,9 @@
 ### 会话 7：M1.2 第 2 次跑 ABORTED（GFW）+ 项目目录整体迁入 harness/
 - ❌ **M1.2 失败**：第 2 次跑目标是分析 https://github.com/KimYx0207/Meta_Kim（元思想开源落地项目）。本机不通 github（curl SSL handshake fail / WebFetch socket closed / gh api EOF / ghproxy 镜像也 fail；百度可达 → GFW）。按 SKILL.md "网络抓取失败 → 不要凭空造内容"，aborted 在 INTAKE 阶段
 - ✅ **logs 记录**：runs.jsonl L3 已写入 aborted record（completed=false / errors=network_unreachable_github），通过 JSON.parse 校验（铁律 #8）
-- ✅ **目录整体迁入**：`E:\ai\study\person\` → `E:\ai\study\person\harness\`。所有 4 项（CLAUDE.md / _meta / design / .claude）move 到 harness/。父目录 `person/` 现在只剩 harness/ 一项
+- ✅ **目录整体迁入**：`<PARENT_DIR>\` → `<PROJECT_ROOT_WIN_LEGACY_OLDNAME>\`。所有 4 项（CLAUDE.md / _meta / design / .claude）move 到 harness/。父目录 `person/` 现在只剩 harness/ 一项
 - ✅ **memory 复制（不删旧）**：`~/.claude/projects/E--ai-study-person/memory/` → `~/.claude/projects/E--ai-study-person-harness/memory/`；旧路径保留作 fallback，等用户验证后再清理
-- 🎯 **下一步（用户）**：退出当前会话，从 `E:\ai\study\person\harness\` 重启 claude；新会话第一件事是验证 memory 是否自动加载
+- 🎯 **下一步（用户）**：退出当前会话，从 `<PROJECT_ROOT_WIN_LEGACY_OLDNAME>\` 重启 claude；新会话第一件事是验证 memory 是否自动加载
 - 🎯 **下一步（M1.2 retry 选项）**：a) 用户开代理后 retry github / b) 换素材（国内可达的 URL/截图/聊天记录）/ c) 跳过此次直接进 M1.3
 - ✅ **用户决策：选 C** —— 跳过 1.2，把"第 2 次跑"挪到 1.5（合并原 1.3/1.4），用国内可达素材
 - 🎯 **新会话第一个动作**：等用户给 1.5 的素材 + intent，然后跑 knowledge-curator
@@ -1090,3 +1119,15 @@
 - phases: (none reported)
 - task: smoke v0.9 P4
 - started → finished: 2026-5-14 10:06:35 → 2026-5-14 10:06:35
+
+### /helix run 2026-5-17-123828 · "smoke v0.9.1 team_advisory：前端 + 后端 同时做 实现登录页和 JWT 后端鉴权 + 弹窗 + form"
+- promise: **COMPLETE_MINIMAL**
+- phases: (none reported)
+- task: smoke v0.9.1 team_advisory：前端 + 后端 同时做 实现登录页和 JWT 后端鉴权 + 弹窗 + form
+- started → finished: 2026-5-17 12:38:28 → 2026-5-17 12:38:28
+
+### /helix run 2026-5-17-124210 · "前端 + 后端 同时做：实现登录页 + JWT 鉴权 + 用户管理 + 权限 + 弹窗"
+- promise: **COMPLETE_MINIMAL**
+- phases: (none reported)
+- task: 前端 + 后端 同时做：实现登录页 + JWT 鉴权 + 用户管理 + 权限 + 弹窗
+- started → finished: 2026-5-17 12:42:10 → 2026-5-17 12:42:10

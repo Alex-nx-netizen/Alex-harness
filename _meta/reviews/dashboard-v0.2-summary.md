@@ -164,10 +164,10 @@ dashboard/server.js (405 行)
 
 | # | 视图 | 文件 |
 |---|---|---|
-| 1 | 实时 `/live` | `E:/ai/study/person/Alex-harness/v2-final-live.png` |
-| 2 | 历史 `/history` | `E:/ai/study/person/Alex-harness/dashboard-v2-history.png` |
-| 3 | 升级 `/evolution` | `E:/ai/study/person/Alex-harness/dashboard-v2-evolution-fixed.png` |
-| 4 | 任务详情 `/task/:id` | `E:/ai/study/person/Alex-harness/dashboard-v2-task.png` |
+| 1 | 实时 `/live` | `<PROJECT_ROOT>/v2-final-live.png` |
+| 2 | 历史 `/history` | `<PROJECT_ROOT>/dashboard-v2-history.png` |
+| 3 | 升级 `/evolution` | `<PROJECT_ROOT>/dashboard-v2-evolution-fixed.png` |
+| 4 | 任务详情 `/task/:id` | `<PROJECT_ROOT>/dashboard-v2-task.png` |
 
 ---
 

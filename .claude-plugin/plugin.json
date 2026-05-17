@@ -1,7 +1,7 @@
 {
   "name": "alex-harness",
-  "version": "0.9.0",
-  "description": "Personal SDLC harness — /helix is the only entrypoint. v0.9.0 承认真实使用数据（35 run 24 finalize 100% phases_run=0）：helix 默认 minimal-mode（仅 start+finalize），--deep 才进 9 phase 全链；stale current-run >30min 自动 abandoned；mode-router 中文 keyword 扩充（接口/界面/弹窗/截图/跳转 等 15 词）+ R 系列真实日志回归测试；治理元 script 加 plugin path fallback；a2 中转文件迁到 _meta/。v0.8.1 anti-redundancy stack + shared lib + TTY UX 全部继承。",
+  "version": "0.9.1",
+  "description": "Personal SDLC harness — /helix is the only entrypoint. v0.9.1 mode-router 闭环硬契约：mode=team 推荐时输出 agent_dispatch_plan（blocking/must_act/agent_specs），LLM 必须按 spec 调 Agent tool；新增 --record-dispatch / --feedback 回填子命令；helix minimal-mode 自动联跑 mode-router-coarse + team_advisory 进 plan instructions；helix-runs.jsonl schema 迁移（24 条 mode=undefined → legacy_pre_v0.9）+ rotate.cjs 加 --before 日期阈值。v0.9.0 minimal-mode 默认 + stale auto-finalize + plugin path fallback 继承。",
   "author": {
     "name": "Alex-nx-netizen",
     "url": "https://github.com/Alex-nx-netizen"

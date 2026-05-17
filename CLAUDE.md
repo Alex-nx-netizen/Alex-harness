@@ -3,7 +3,7 @@
 > 这是Alex的私人 agent harness 项目。
 > 目标：基于 OpenAI Harness Engineering 三部曲 + 元思想，搭建属于自己的 agent harness。
 > 状态：v0.1（蓝图已整合，进入 Phase 1 / M1），持续迭代。
-> 工作目录：`/Users/a1234/person/ai/study/Alex-harness/`（2026-5-8 从 Win `E:\ai\study\person\Alex-harness\` 迁 mac；4-28 在 Win 下从 `E:\ai\study\person\harness\` 重命名）
+> 工作目录：项目根目录（git clone 后即可）
 
 ## 项目定位
 
@@ -40,6 +40,44 @@
 6. **永远不直接改 `design/harness-blueprint.md` 的实质内容**——这是用户的主权区域，Claude 只能填骨架/格式
 7. **时间格式统一**：所有时间戳/日期一律用北京时间，格式 `YYYY-M-D HH:MM:SS`（含时刻）或 `YYYY-M-D`（仅日期）。**禁用** ISO 8601 `T+08:00`、UTC、前导 0 月份/日期。例：`2026-4-28 22:18:40` ✅；`2026-04-28T15:20:00+08:00` ❌
 8. **写 JSON/JSONL 后必须立刻校验**：用 `node -e "JSON.parse(require('fs').readFileSync('path','utf-8'))"` 或脚本逐行 parse。Windows 路径里的 `\` 在 JSON 字符串中必须转义为 `\\`。这条是 F-008 的产物（蓝图 §3.A6 校验元缺失的具象化）
+
+## 反 mode-router 空挂硬规则（v0.9.1 新增 · 闭环硬契约）
+
+> 来源：2026-5-17 实测 mode-router-log 81 条 / team 推荐 36 条 / 真派 Agent **0 条** → 推荐永远是空气。
+> 目的：让"推荐 team"和"我真调 Agent tool"之间不再脱节，给 evolution-tracker 喂真实执行证据。
+
+### 何时必须**先**跑 mode-router
+
+收到用户任务，满足任一条件即必须先跑 `node skills/mode-router/run.cjs --coarse "<原文>"`：
+
+1. 任务文本含「并行 / 同时做 / 前端+后端 / 拆分 / 多模块 / review / 审查 / 一写一审 / 重构 / 迁移」任一关键词
+2. 任务文本 ≥ 80 字
+3. 涉及 ≥ 3 个独立子任务
+
+### 看到 `mode=team` + `agent_dispatch_plan.must_act=true` 后
+
+LLM（也就是你）**必须**：
+
+1. **本回合**就按 `agent_dispatch_plan.agent_specs[i]` 调 Agent tool，数量 = `dispatch_count`
+   - `shape=subagent_parallel` → **一条消息**里多个 Agent 调用块（并行）
+   - `shape=manager_worker` → 先调 1 个 manager，让它内部派 worker
+   - `shape=peer_review` → 串行（implementer → reviewer）
+2. **派完后立刻**跑 `node skills/mode-router/run.cjs --record-dispatch '<run_id>' <id1,id2,...>` 回填真 ID
+3. **不同意推荐** → 先跑 `node skills/mode-router/run.cjs --feedback '<run_id>' --override=solo --notes='<原因>'`，再 solo
+
+### 禁止
+
+- 看到 `agent_dispatch_plan.must_act=true` 但**直接 solo 干活** = 推荐空挂违规
+- 给 `--record-dispatch` 填假 ID（< 4 字符 或 没有真 Agent 返回）
+- 跳过 `--record-dispatch`（evolution-tracker 永远学不到 → mode-router 信号死循环）
+
+### 例外（不需要跑 mode-router）
+
+- 任务 < 80 字 且 不含上面任一关键词 且 是简单单文件改动
+- 用户明确说"solo 跑" / "不用拆分" / "我就改个 typo"
+- 任务是元层操作（改 CLAUDE.md / 改 skill 自身 / git 操作）
+
+---
 
 ## 反冗余硬规则（v0.8.1 新增 · Karpathy + Lean Code 落地）
 

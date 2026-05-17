@@ -1,8 +1,8 @@
 # Task Plan: Personal Agent Harness
 
-## 当前阶段（2026-5-13 体检后刷新）
+## 当前阶段（2026-5-17 v0.9.1 mode-router 闭环 后刷新）
 
-**Phase 8.1 / v0.8.1：反冗余三阶段升级 + 项目体检整改（A-H）**
+**Phase 9.1 / v0.9.1：mode-router 推荐 → Agent 派发 闭环（解决"推荐空挂"）**
 
 ### 已完成里程碑总览
 
@@ -15,26 +15,44 @@
 | **v0.7** | 5-2 → 5-4 | dashboard / hooks / e2e fixtures / Worker A 升级 |
 | **v0.7.2** | 5-11 | code-review skill + 5 维评分 + soft-fail（10 phase）|
 | **v0.8.0** | 5-12 | 12-item upgrade — Ralph completion + OTLP + dogfood + drops |
-| **v0.8.1** | 5-13 | **反冗余三阶段**（CLAUDE.md 硬规则 + code-simplifier + refactor-cycle）|
+| **v0.8.1** | 5-13 | 反冗余三阶段（CLAUDE.md 硬规则 + code-simplifier + refactor-cycle）|
+| **v0.9.0** | 5-14 | minimal-mode 默认（承认真实数据：phases_run=0 是常态）|
+| **v0.9.1** | 5-17 | **mode-router 闭环硬契约**（推荐 team → Claude 必调 Agent tool）+ helix-runs schema 迁移 + rotate `--before` |
 
-### 本阶段子任务（v0.8.1 体检整改 · 5-13 ~ 进行中）
+### 上阶段子任务（v0.8.1 体检整改 · 5-13 全部关闭）
 
 | # | 任务 | 状态 | 备注 |
 |---|------|------|------|
-| 8.1.A | 删 `tmux-*.log`（55MB）+ 验 `.gitignore` 覆盖 | ✅ 完成 | 已确认 `*.log` 覆盖；释放磁盘 |
+| 8.1.A | 删 `tmux-*.log`（55MB）+ 验 `.gitignore` 覆盖 | ✅ 完成 | 已确认 `*.log` 覆盖 |
 | 8.1.B | CLAUDE.md 4 处 `.claude/skills/` → `skills/` + 删过期 11 行 | ✅ 完成 | - |
-| 8.1.H | findings.md 加状态总览（✅/📐/🟢）；下编号 F-026 | ✅ 完成 | - |
-| 8.1.E | task_plan.md 刷新到 v0.8.1（本次）| 🚧 进行中 | - |
-| 8.1.C | 给 14 条已有 logs/runs.jsonl 标注 user_feedback | ⏳ 计划 | bootstrap test 标 test_scenario；real run 留草案 |
-| 8.1.D | 抽 `_meta/lib/common.cjs`（nowBJ/safeAppend/DIMENSIONS）| ⏳ 计划 | 14 处去重；吃 code-simplifier 狗粮 |
-| 8.1.G | `_meta/rotate.cjs` 接 hook 自动轮转 jsonl | ⏳ 计划 | helix-runs.jsonl 84KB |
-| 8.1.F | 月度 refactor cycle issue 2/3 评估（context-curator 1011 行 / helix 746 行 拆分）| ⏳ 评估后再决定 | 多小时大重构，可能挪到下次 cycle |
+| 8.1.C | 给 14 条已有 logs/runs.jsonl 标注 user_feedback | ✅ 完成 | 会话 32 用 audit_fill_feedback.cjs 全 15 条标 bootstrap |
+| 8.1.D | 抽 `_meta/lib/common.cjs`（nowBJ/safeAppend）| ✅ 完成 | 会话 32；14 处去重；省 ~4500 字节 |
+| 8.1.E | task_plan.md 刷新 | ✅ 完成 | 会话 32（v0.8.1 → v0.9.0） |
+| 8.1.F | 大重构评估（context-curator/helix 拆分）| ✅ 完成 | 拍 defer 到下次 cycle（2026-6-1）|
+| 8.1.G | `_meta/rotate.cjs` 接 hook | ✅ 完成 | 会话 32 改为绑月度 cycle Step 0（不强行 hook）|
+| 8.1.H | findings.md 状态总览 + F-026 起编号 | ✅ 完成 | - |
 
-### 下一阶段候选（M5+）
+### 当前阶段子任务（v0.9.1 闭环 · 5-17 ~ 进行中）
 
-- **M5 候选**: 把 evolution-tracker 接到 logs/runs.jsonl 真实输入（前提：8.1.C 把 feedback 填起来）
-- **plugin 发布**: v0.8.1 后是否往 `claude plugin marketplace` 推动一次外部试用
-- **Dashboard 演进**: 加 code-simplifier / code-review trend 图卡（基于 logs/runs.jsonl）
+| # | 任务 | 状态 | 备注 |
+|---|------|------|------|
+| 9.1.1 | mode-router 输出 `agent_dispatch_plan` 字段（mode=team 时） | ✅ 完成 | `buildAgentDispatchPlan(r, runId)`；shape 三种全覆盖 |
+| 9.1.2 | 加 `--record-dispatch '<run_id>' <ids>` 回填子命令（ID ≥4 字符校验） | ✅ 完成 | `patchRouterLogEntry` 写后逐行 JSON.parse |
+| 9.1.3 | 加 `--feedback '<run_id>' --rating=0\|1 --override=solo\|team` 子命令 | ✅ 完成 | 81 条 user_feedback 全空的根因解决 |
+| 9.1.4 | helix `--start` minimal mode 自动联跑 mode-router-coarse | ✅ 完成 | `team_advisory` 字段进 plan + state；触发条件：task ≥ 20 字 |
+| 9.1.5 | helix instructions 把 dispatch 指令推到第一条 | ✅ 完成 | mode=team 时 unshift "🚨 mode-router 推荐 ..." |
+| 9.1.6 | CLAUDE.md 加"反 mode-router 空挂硬规则" | ✅ 完成 | 何时跑 / 看到 team 怎么做 / 禁止 / 例外 |
+| 9.1.7 | SKILL.md §13 新增 v0.9.1 闭环硬契约段 + 修订历史 | ✅ 完成 | 版本 0.3.0 → 0.9.1 |
+| 9.1.8 | helix-runs.jsonl mode 字段迁移（24 条 undefined → legacy_pre_v0.9）| ✅ 完成 | `_meta/migrate_helix_runs_mode.cjs` dry-run + apply |
+| 9.1.9 | rotate.cjs 加 `--before YYYY-M-D` 阈值模式 | ✅ 完成 | 115KB → 10KB；291 条归档到 archive/before-2026-5-14 |
+| 9.1.10 | 单元测试回归 35/35 通过 | ✅ 完成 | - |
+
+### 下一阶段候选（v0.9.2+）
+
+- **闭环监督**：evolution-tracker 加 "dispatch_required=true && dispatched_ids=null" 检测，连续 3 次触发 P 议案
+- **真实任务积累**：minimal mode helix start 现在能自动留 team_advisory 记录；目标 v0.9.x ≥10 真实 run（mode=minimal + team_advisory.dispatch_required + 真 dispatched_subagent_ids）
+- **plugin 发布**：v0.9.1 闭环验证后，往 `claude plugin marketplace` 推一次外部试用
+- **Dashboard 演进**：加 mode-router 闭环率图卡（dispatched ÷ team_recommended）
 
 ## Phase 0 子任务（已完成）
 
